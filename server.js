@@ -1,8 +1,6 @@
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
-const path = require('path');
-const fs = require('fs');
 
 const config = require('./src/config');
 
@@ -13,9 +11,9 @@ if (config.smartglassDebug) {
 const bus = require('./src/bus');
 const state = require('./src/state');
 const { plog, getRecentLogs, paths: logPaths } = require('./src/logger');
-const { discoverConsoles, connectToConsole, disconnect } = require('./src/xbox/connection');
 const { sendButton, runMacro, sendMediaCommand } = require('./src/xbox/input');
 const { sendText, submitText, cancelText } = require('./src/xbox/text');
+const { registerHttpRoutes } = require('./src/server/http');
 
 const app = express();
 const server = http.createServer(app);
@@ -32,76 +30,7 @@ bus.on('log', entry => broadcast({ type: 'log', ...entry }));
 bus.on('state', snapshot => broadcast({ type: 'state', ...snapshot }));
 bus.on('text_session', payload => broadcast({ type: 'text_session', ...payload }));
 
-// ── Express ────────────────────────────────────────────
-app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.json());
-
-app.get('/api/status', (req, res) => {
-  res.json(state.snapshot());
-});
-
-app.get('/api/logs', (req, res) => {
-  res.json(getRecentLogs(200));
-});
-
-// Download the current session log file
-app.get('/api/logs/download', (req, res) => {
-  if (fs.existsSync(logPaths.sessionLog)) {
-    res.download(logPaths.sessionLog);
-  } else {
-    res.status(404).json({ error: 'No log file yet' });
-  }
-});
-
-// Download the JSONL structured log
-app.get('/api/logs/download-json', (req, res) => {
-  if (fs.existsSync(logPaths.sessionJson)) {
-    res.download(logPaths.sessionJson);
-  } else {
-    res.status(404).json({ error: 'No log file yet' });
-  }
-});
-
-// List all saved log files
-app.get('/api/logs/list', (req, res) => {
-  if (!fs.existsSync(logPaths.logDir)) return res.json([]);
-  const files = fs.readdirSync(logPaths.logDir)
-    .filter(f => f.startsWith('session-') && f.endsWith('.log'))
-    .map(f => ({
-      name: f,
-      size: fs.statSync(path.join(logPaths.logDir, f)).size,
-      modified: fs.statSync(path.join(logPaths.logDir, f)).mtime,
-    }))
-    .sort((a, b) => b.modified - a.modified);
-  res.json(files);
-});
-
-app.post('/api/discover', async (req, res) => {
-  try {
-    const consoles = await discoverConsoles(req.body.ip);
-    res.json({ ok: true, consoles: consoles.map(c => ({
-      name: c.message.name || 'Xbox',
-      ip: c.remote.address,
-      type: c.message.type,
-    }))});
-  } catch (err) {
-    res.json({ ok: false, error: err.message || 'Discovery failed' });
-  }
-});
-
-app.post('/api/connect', async (req, res) => {
-  try {
-    await connectToConsole(req.body.ip);
-    res.json({ ok: true });
-  } catch (err) {
-    res.json({ ok: false, error: state.lastError || 'Connection failed' });
-  }
-});
-
-app.post('/api/disconnect', (req, res) => {
-  disconnect();
-  res.json({ ok: true });
-});
+registerHttpRoutes(app);
 
 // ── WebSocket ──────────────────────────────────────────
 wss.on('connection', (ws) => {
