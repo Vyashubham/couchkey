@@ -432,43 +432,7 @@ function setupTextEventListeners() {
   });
 }
 
-function summarizeEventData(eventName, args) {
-  try {
-    if (args[0] && args[0].packet_decoded) {
-      const pd = args[0].packet_decoded;
-      return {
-        type: pd.type,
-        name: pd.name || args[0].name,
-        flags: pd.flags,
-        sequence_number: pd.sequence_number,
-        source_participant_id: pd.source_participant_id,
-        target_participant_id: pd.target_participant_id,
-        protected_payload: pd.protected_payload ? {
-          ...pd.protected_payload,
-          // Truncate long fields
-          certificate: pd.protected_payload.certificate ? `[${pd.protected_payload.certificate.length} bytes]` : undefined,
-        } : undefined,
-      };
-    }
-    return { arg_count: args.length };
-  } catch (e) {
-    return { error: 'Could not summarize', detail: e.message };
-  }
-}
-
-function parseConnectionError(err) {
-  if (err && err.message) {
-    if (err.message.includes('anonymous')) {
-      return 'Xbox is blocking anonymous connections. Go to Settings → Devices & connections → Remote features → Allow connections from any device.';
-    }
-    if (err.message.includes('disabled')) {
-      return 'SmartGlass is disabled on your Xbox. Enable Remote features in Settings.';
-    }
-    return err.message;
-  }
-  if (err && err.error) return err.error;
-  return JSON.stringify(err);
-}
+const { parseConnectionError, summarizeEventData } = require('./src/protocol/helpers');
 
 function scheduleReconnect(ip) {
   if (reconnectTimer) clearTimeout(reconnectTimer);
