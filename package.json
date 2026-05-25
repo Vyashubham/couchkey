@@ -1,0 +1,14 @@
+{
+  "name": "xbox-remote",
+  "version": "2.0.0",
+  "description": "Xbox Remote Control via SmartGlass",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.16.0",
+    "xbox-smartglass-core-node": "^0.6.10"
+  }
+}
