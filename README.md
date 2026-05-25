@@ -1,7 +1,8 @@
 # xbox-keyboard
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Node.js](https://img.shields.io/badge/node-%3E%3D14-brightgreen)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org/)
+[![CI](https://github.com/Vyashubham/xbox-keyboard/actions/workflows/ci.yml/badge.svg)](https://github.com/Vyashubham/xbox-keyboard/actions/workflows/ci.yml)
 
 > Control your Xbox Series X|S or Xbox One from your laptop keyboard over your local network.
 > No mobile app. No controller. No Microsoft account login. Just `npm start` and open a browser tab.
@@ -36,7 +37,7 @@ random disconnects. This is the small, local-only alternative.
 
 ## Requirements
 
-- **Node.js 14 or newer**
+- **Node.js 18 or newer**
 - **Xbox Series X|S or Xbox One** on the same local network as your computer
 - Xbox setting: **Settings → Devices & connections → Remote features → Xbox app preferences → Allow connections from any device**
 
