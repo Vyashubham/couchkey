@@ -16,6 +16,7 @@ const PacketStructure = require('xbox-smartglass-core-node/src/packet/structure'
 
 // Message flag values (16-bit): version(2)|need_ack(1)|is_fragment(1)|type(12)
 const FLAG_SYSTEM_TEXT_INPUT = Buffer.from('af2c', 'hex'); // 0xF2C
+const FLAG_SYSTEM_TEXT_ACK = Buffer.from('af34', 'hex');   // 0xF34
 const FLAG_SYSTEM_TEXT_DONE = Buffer.from('af35', 'hex');  // 0xF35
 
 const PACKET_TYPE_MESSAGE = Buffer.from('d00d', 'hex');
@@ -50,7 +51,13 @@ function sealMessage({ xbox, header, payloadBuf }) {
   return packet;
 }
 
-// SystemTextInput payload (flag 0xF2C).
+// SystemTextInput payload (flag 0xF2C). Layout matches the OpenXbox
+// C# reference (SmartGlass/Channels/Text/SystemTextInputMessage):
+//   session_id (u32), version (u32), flags (u16), text (SGString),
+//   delta_offset (u32), delta_length (u32),
+//   selection_start (i32), selection_length (i32)
+// Omitting the four trailing fields makes the Xbox silently drop the
+// input — it acknowledges the packet but never updates the field.
 function buildTextInputPacket({ xbox, channelId, text, sessionId, version }) {
   if (!xbox || !channelId) throw new Error('buildTextInputPacket: missing xbox or channelId');
 
@@ -59,12 +66,37 @@ function buildTextInputPacket({ xbox, channelId, text, sessionId, version }) {
   payload.writeUInt32(version);
   payload.writeUInt16(0);              // flags (0 = full replace)
   payload.writeSGString(text);         // text chunk
+  payload.writeUInt32(0);              // delta_offset
+  payload.writeUInt32(0);              // delta_length
+  payload.writeInt32(text.length);     // selection_start (cursor at end)
+  payload.writeInt32(0);               // selection_length (no selection)
 
   const payloadBuf = payload.toBuffer();
   const header = buildMessageHeader({
     xbox,
     channelId,
     flags: FLAG_SYSTEM_TEXT_INPUT,
+    payloadLength: payloadBuf.length,
+  });
+
+  return sealMessage({ xbox, header, payloadBuf });
+}
+
+// SystemTextAcknowledge payload (flag 0xF34) — the C# reference client
+// sends this after every SystemTextInput so the Xbox knows we've seen
+// the latest version. Layout: session_id (u32), version_ack (u32).
+function buildTextAckPacket({ xbox, channelId, sessionId, versionAck }) {
+  if (!xbox || !channelId) throw new Error('buildTextAckPacket: missing xbox or channelId');
+
+  const payload = PacketStructure();
+  payload.writeUInt32(sessionId);
+  payload.writeUInt32(versionAck);
+
+  const payloadBuf = payload.toBuffer();
+  const header = buildMessageHeader({
+    xbox,
+    channelId,
+    flags: FLAG_SYSTEM_TEXT_ACK,
     payloadLength: payloadBuf.length,
   });
 
@@ -95,5 +127,6 @@ function buildTextDonePacket({ xbox, channelId, sessionId, version, result }) {
 
 module.exports = {
   buildTextInputPacket,
+  buildTextAckPacket,
   buildTextDonePacket,
 };
