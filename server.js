@@ -80,20 +80,7 @@ function plog(level, msg, data) {
   broadcast({ type: 'log', ...entry });
 }
 
-// ── Macro definitions ──────────────────────────────────
-const MACROS = {
-  'open_guide':      [{ btn: 'nexus', delay: 0 }],
-  'go_home':         [{ btn: 'nexus', delay: 0 }, { btn: 'a', delay: 500 }],
-  'open_search':     [{ btn: 'nexus', delay: 0 }, { btn: 'y', delay: 500 }],
-  'screenshot':      [{ btn: 'nexus', delay: 0 }, { btn: 'y', delay: 500 }],
-  'record_clip':     [{ btn: 'nexus', delay: 0 }, { btn: 'x', delay: 500 }],
-  'quick_settings':  [
-    { btn: 'nexus', delay: 0 },
-    { btn: 'right', delay: 400 }, { btn: 'right', delay: 200 },
-    { btn: 'right', delay: 200 }, { btn: 'right', delay: 200 }
-  ],
-  'parties':         [{ btn: 'nexus', delay: 0 }, { btn: 'right', delay: 400 }],
-};
+const MACROS = require('./src/macros');
 
 // ── Broadcast helpers ──────────────────────────────────
 function broadcast(obj) {
