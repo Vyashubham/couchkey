@@ -358,110 +358,7 @@ function forceOpenChannels() {
   });
 }
 
-// ── Text input via raw SmartGlass protocol ─────────────
-// The Node.js library doesn't implement text messages, so we build raw packets.
-// Protocol: SystemTextInput (0xF2C) sends text on the SystemText channel.
-// 
-// The approach: instead of implementing the full text session protocol
-// (which requires tracking TextConfiguration events, session IDs, versions, and acks),
-// we take a simpler approach that works: we send each character as a gamepad d-pad
-// navigation on the Xbox's on-screen keyboard... NO — that's too slow.
-//
-// Better: we build a raw SystemTextInput packet ourselves using the library's
-// crypto infrastructure. The text message payload format (from C# source):
-//   - text_session_id: uint32
-//   - text_version: uint32  
-//   - flags: uint16 (0 = text delta)
-//   - text_chunk_size: uint16
-//   - text_chunk: SGString (the actual text)
-//   - delta_offset: uint32 (byte offset where replacement starts)
-//   - delta_length: uint32 (number of bytes to replace)
-//   - selection_start: uint32 (cursor position)
-//   - selection_length: uint32 (selection length)
-
-function buildTextInputPacket(text, sessionId, version) {
-  if (!sgClient || !sgClient._console || !textChannelId) {
-    plog('err', 'Cannot send text: no text channel');
-    return null;
-  }
-  
-  const PacketStructure = require('xbox-smartglass-core-node/src/packet/structure');
-  const xbox = sgClient._console;
-  
-  // Build the payload
-  const payload = PacketStructure();
-  payload.writeUInt32(sessionId);           // text_session_id
-  payload.writeUInt32(version);             // text_version  
-  payload.writeUInt16(0);                   // flags (0 = replace)
-  payload.writeSGString(text);              // text_chunk (the full text)
-
-  // Build header
-  const header = PacketStructure();
-  header.writeBytes(Buffer.from('d00d', 'hex'));           // packet type
-  header.writeUInt16(payload.toBuffer().length);           // payload length
-  header.writeUInt32(xbox._request_num);                   // sequence number
-  header.writeUInt32(xbox._target_participant_id);         // target
-  header.writeUInt32(xbox._source_participant_id);         // source
-  header.writeBytes(Buffer.from('af2c', 'hex'));           // flags: version=2, need_ack=1, type=0xF2C (SystemTextInput)
-  header.writeBytes(Buffer.from(textChannelId));           // channel ID
-  
-  // Pad payload to 16-byte alignment
-  let payloadBuf = payload.toBuffer();
-  if (payloadBuf.length % 16 > 0) {
-    const padLen = 16 - (payloadBuf.length % 16);
-    const padding = Buffer.alloc(padLen, padLen);
-    payloadBuf = Buffer.concat([payloadBuf, padding]);
-  }
-  
-  // Encrypt
-  const key = xbox._crypto._encrypt(header.toBuffer().slice(0, 16), xbox._crypto.getIv());
-  const encrypted = xbox._crypto._encrypt(payloadBuf, xbox._crypto.getEncryptionKey(), key);
-  
-  // Assemble
-  let packet = Buffer.concat([header.toBuffer(), encrypted]);
-  
-  // Sign
-  const hash = xbox._crypto._sign(packet);
-  packet = Buffer.concat([packet, Buffer.from(hash)]);
-  
-  return packet;
-}
-
-function buildTextDonePacket(sessionId, version, result) {
-  if (!sgClient || !sgClient._console || !textChannelId) return null;
-  
-  const PacketStructure = require('xbox-smartglass-core-node/src/packet/structure');
-  const xbox = sgClient._console;
-  
-  // Payload: session_id (uint32), version (uint32), flags (uint16), result (uint32)
-  const payload = PacketStructure();
-  payload.writeUInt32(sessionId);
-  payload.writeUInt32(version);
-  payload.writeUInt16(0);             // flags
-  payload.writeUInt32(result);        // 0 = Accept, 1 = Cancel
-  
-  const header = PacketStructure();
-  header.writeBytes(Buffer.from('d00d', 'hex'));
-  header.writeUInt16(payload.toBuffer().length);
-  header.writeUInt32(xbox._request_num);
-  header.writeUInt32(xbox._target_participant_id);
-  header.writeUInt32(xbox._source_participant_id);
-  header.writeBytes(Buffer.from('af35', 'hex'));  // SystemTextDone
-  header.writeBytes(Buffer.from(textChannelId));
-  
-  let payloadBuf = payload.toBuffer();
-  if (payloadBuf.length % 16 > 0) {
-    const padLen = 16 - (payloadBuf.length % 16);
-    payloadBuf = Buffer.concat([payloadBuf, Buffer.alloc(padLen, padLen)]);
-  }
-  
-  const key = xbox._crypto._encrypt(header.toBuffer().slice(0, 16), xbox._crypto.getIv());
-  const encrypted = xbox._crypto._encrypt(payloadBuf, xbox._crypto.getEncryptionKey(), key);
-  let packet = Buffer.concat([header.toBuffer(), encrypted]);
-  packet = Buffer.concat([packet, Buffer.from(xbox._crypto._sign(packet))]);
-  
-  return packet;
-}
+const { buildTextInputPacket, buildTextDonePacket } = require('./src/protocol/packets');
 
 async function sendText(text) {
   if (!sgClient || !textChannelOpen) {
@@ -475,9 +372,14 @@ async function sendText(text) {
     currentText = text;
     
     sgClient._console.get_requestnum();
-    const packet = buildTextInputPacket(text, textSessionId, textVersion);
-    if (!packet) return { ok: false, error: 'Failed to build text packet' };
-    
+    const packet = buildTextInputPacket({
+      xbox: sgClient._console,
+      channelId: textChannelId,
+      text,
+      sessionId: textSessionId,
+      version: textVersion,
+    });
+
     sgClient._send(packet);
     plog('ok', `Text sent: "${text}" (session: ${textSessionId}, version: ${textVersion})`);
     
@@ -497,9 +399,14 @@ async function submitText() {
   
   try {
     sgClient._console.get_requestnum();
-    const packet = buildTextDonePacket(textSessionId, textVersion, 0); // 0 = Accept
-    if (!packet) return { ok: false, error: 'Failed to build text done packet' };
-    
+    const packet = buildTextDonePacket({
+      xbox: sgClient._console,
+      channelId: textChannelId,
+      sessionId: textSessionId,
+      version: textVersion,
+      result: 0,
+    });
+
     sgClient._send(packet);
     textSessionActive = false;
     plog('ok', 'Text submitted (done with accept)');
@@ -519,9 +426,14 @@ async function cancelText() {
   
   try {
     sgClient._console.get_requestnum();
-    const packet = buildTextDonePacket(textSessionId, textVersion, 1); // 1 = Cancel
-    if (!packet) return { ok: false, error: 'Failed to build cancel packet' };
-    
+    const packet = buildTextDonePacket({
+      xbox: sgClient._console,
+      channelId: textChannelId,
+      sessionId: textSessionId,
+      version: textVersion,
+      result: 1,
+    });
+
     sgClient._send(packet);
     textSessionActive = false;
     currentText = '';
