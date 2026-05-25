@@ -20,7 +20,6 @@ const fs = require('fs');
 const bus = require('./src/bus');
 const state = require('./src/state');
 const { plog, getRecentLogs, paths: logPaths } = require('./src/logger');
-const MACROS = require('./src/macros');
 
 bus.on('log', entry => {
   broadcast({ type: 'log', ...entry });
@@ -216,60 +215,7 @@ function scheduleReconnect(ip) {
   }, config.reconnectDelayMs);
 }
 
-const BUTTON_MIN_INTERVAL = config.buttonMinIntervalMs;
-
-async function sendButton(button) {
-  if (!state.sgClient) return { ok: false, error: 'No client' };
-  
-  const mgr = state.sgClient.getManager('system_input');
-  if (!mgr) return { ok: false, error: 'No system_input manager' };
-  
-  const chStatus = mgr._channel_manager ? mgr._channel_manager.getStatus() : false;
-
-  if (!chStatus) {
-    plog('warn', `sendButton('${button}') — channel not open`);
-    return { ok: false, error: 'Channel not ready. Try reconnecting.' };
-  }
-
-  // Throttle: wait if we sent too recently
-  const now = Date.now();
-  const timeSince = now - state.lastButtonTime;
-  if (timeSince < BUTTON_MIN_INTERVAL) {
-    await new Promise(r => setTimeout(r, BUTTON_MIN_INTERVAL - timeSince));
-  }
-  state.lastButtonTime = Date.now();
-
-  try {
-    await mgr.sendCommand(button);
-    plog('ok', `Button '${button}' sent`);
-    return { ok: true, button };
-  } catch (err) {
-    plog('err', `Button '${button}' failed: ${JSON.stringify(err)}`);
-    return { ok: false, error: err.error || JSON.stringify(err) };
-  }
-}
-
-async function runMacro(macroName) {
-  const steps = MACROS[macroName];
-  if (!steps) return { ok: false, error: `Unknown macro: ${macroName}` };
-  plog('info', `Running macro: ${macroName} (${steps.length} steps)`);
-  for (const step of steps) {
-    if (step.delay > 0) await new Promise(r => setTimeout(r, step.delay));
-    const result = await sendButton(step.btn);
-    if (!result.ok) return result;
-  }
-  return { ok: true, macro: macroName };
-}
-
-async function sendMediaCommand(cmd) {
-  if (!state.sgClient) return { ok: false, error: 'Not connected' };
-  try {
-    await state.sgClient.getManager('system_media').sendCommand(cmd);
-    return { ok: true, cmd };
-  } catch (err) {
-    return { ok: false, error: err.error || 'Media command failed' };
-  }
-}
+const { sendButton, runMacro, sendMediaCommand } = require('./src/xbox/input');
 
 // ── Express ────────────────────────────────────────────
 app.use(express.static(path.join(__dirname, 'public')));
