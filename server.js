@@ -2,12 +2,15 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
+const config = require('./src/config');
+
+if (config.smartglassDebug) {
+  process.env.DEBUG = 'smartglass:*';
+}
+
 const Smartglass = require('xbox-smartglass-core-node');
 const SystemInputChannel = require('xbox-smartglass-core-node/src/channels/systeminput');
 const SystemMediaChannel = require('xbox-smartglass-core-node/src/channels/systemmedia');
-
-// Enable ALL debug logging from the smartglass library
-process.env.DEBUG = 'smartglass:*';
 
 const app = express();
 const server = http.createServer(app);
@@ -31,7 +34,7 @@ let textSessionActive = false;
 
 // ── File logging ───────────────────────────────────────
 const fs = require('fs');
-const LOG_DIR = path.join(__dirname, 'logs');
+const LOG_DIR = config.logDir;
 if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
 
 const sessionTimestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -54,7 +57,7 @@ function plog(level, msg, data) {
     data: data ? JSON.stringify(data, null, 2) : undefined,
   };
   protocolLogs.push(entry);
-  if (protocolLogs.length > 500) protocolLogs.shift();
+  if (protocolLogs.length > config.protocolLogRingBufferSize) protocolLogs.shift();
   
   // Console output
   const icons = { info: '🔵', ok: '✅', warn: '⚠️', err: '❌', proto: '📡' };
@@ -222,7 +225,7 @@ async function connectToConsole(ip) {
       
       setTimeout(() => {
         forceOpenChannels();
-      }, 500);
+      }, config.forceOpenChannelDelayMs);
 
       // Also listen for _on_console_status in case it DOES fire (Xbox One, or future firmware)
       sgClient._events.on('_on_console_status', () => {
@@ -253,7 +256,7 @@ async function connectToConsole(ip) {
           channelCheckInterval = null;
         }
 
-        if (checkCount >= 20) {
+        if (checkCount >= config.channelMonitorMaxChecks) {
           clearInterval(channelCheckInterval);
           channelCheckInterval = null;
           if (!inputReady) {
@@ -263,7 +266,7 @@ async function connectToConsole(ip) {
           }
         }
         broadcastState();
-      }, 1000);
+      }, config.channelMonitorIntervalMs);
 
       broadcastState();
 
@@ -364,7 +367,7 @@ function forceOpenChannels() {
       } catch (e) {
         plog('err', `Failed to send channel request for ${ch.name}: ${e.message}`, e.stack);
       }
-    }, index * 200); // Stagger by 200ms to avoid overwhelming
+    }, index * config.channelOpenStaggerMs);
   });
 }
 
@@ -614,12 +617,12 @@ function scheduleReconnect(ip) {
   reconnectTimer = setTimeout(() => {
     plog('info', 'Attempting auto-reconnect...');
     connectToConsole(ip).catch(() => scheduleReconnect(ip));
-  }, 5000);
+  }, config.reconnectDelayMs);
 }
 
 // ── Button send with throttle ──────────────────────────
 let lastButtonTime = 0;
-const BUTTON_MIN_INTERVAL = 150; // ms between button sends
+const BUTTON_MIN_INTERVAL = config.buttonMinIntervalMs;
 let buttonQueue = [];
 let buttonProcessing = false;
 
@@ -764,7 +767,7 @@ wss.on('connection', (ws) => {
   plog('info', 'GUI client connected via WebSocket');
   // Send current state + recent logs
   ws.send(JSON.stringify({ type: 'state', status: connectionStatus, console: connectedConsole, inputReady, lastError, channelStatus: getChannelStatus() }));
-  protocolLogs.slice(-50).forEach(entry => {
+  protocolLogs.slice(-config.websocketLogReplayCount).forEach(entry => {
     ws.send(JSON.stringify({ type: 'log', ...entry }));
   });
 
@@ -813,7 +816,7 @@ wss.on('connection', (ws) => {
 // Clear latest.log for this new session
 try { fs.writeFileSync(LATEST_LOG, ''); fs.writeFileSync(LATEST_JSON, ''); } catch(e) {}
 
-const PORT = process.env.PORT || 3247;
+const PORT = config.port;
 server.listen(PORT, () => {
   console.log(`
 ╔══════════════════════════════════════════════════════════╗
