@@ -32,55 +32,14 @@ let textVersion = 0;
 let currentText = '';
 let textSessionActive = false;
 
-// ── File logging ───────────────────────────────────────
 const fs = require('fs');
-const LOG_DIR = config.logDir;
-if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
-
-const sessionTimestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-const LOG_FILE = path.join(LOG_DIR, `session-${sessionTimestamp}.log`);
-const LOG_FILE_JSON = path.join(LOG_DIR, `session-${sessionTimestamp}.jsonl`);
-
-// Also maintain a "latest" symlink/copy for convenience
-const LATEST_LOG = path.join(LOG_DIR, 'latest.log');
-const LATEST_JSON = path.join(LOG_DIR, 'latest.jsonl');
-
-console.log(`📝 Logs saving to: ${LOG_FILE}`);
-
-// All protocol logs stored here for the GUI
-const protocolLogs = [];
-function plog(level, msg, data) {
-  const entry = {
-    time: new Date().toISOString(),
-    level, // 'info' | 'ok' | 'warn' | 'err' | 'proto'
-    msg,
-    data: data ? JSON.stringify(data, null, 2) : undefined,
-  };
-  protocolLogs.push(entry);
-  if (protocolLogs.length > config.protocolLogRingBufferSize) protocolLogs.shift();
-  
-  // Console output
-  const icons = { info: '🔵', ok: '✅', warn: '⚠️', err: '❌', proto: '📡' };
-  console.log(`${icons[level] || '·'} ${msg}`);
-  if (data) console.log('  ', typeof data === 'string' ? data : JSON.stringify(data, null, 2));
-  
-  // File output — human-readable log
-  const timeShort = entry.time.slice(11, 23);
-  const levelPad = level.toUpperCase().padEnd(5);
-  let logLine = `[${timeShort}] ${levelPad} ${msg}\n`;
-  if (entry.data) logLine += `               ${entry.data}\n`;
-  fs.appendFile(LOG_FILE, logLine, () => {});
-  fs.appendFile(LATEST_LOG, logLine, () => {});
-  
-  // File output — structured JSONL (one JSON object per line, easy to parse)
-  fs.appendFile(LOG_FILE_JSON, JSON.stringify(entry) + '\n', () => {});
-  fs.appendFile(LATEST_JSON, JSON.stringify(entry) + '\n', () => {});
-  
-  // Push to all websocket clients
-  broadcast({ type: 'log', ...entry });
-}
-
+const bus = require('./src/bus');
+const { plog, getRecentLogs, paths: logPaths } = require('./src/logger');
 const MACROS = require('./src/macros');
+
+bus.on('log', entry => {
+  broadcast({ type: 'log', ...entry });
+});
 
 // ── Broadcast helpers ──────────────────────────────────
 function broadcast(obj) {
@@ -592,13 +551,13 @@ app.get('/api/status', (req, res) => {
 });
 
 app.get('/api/logs', (req, res) => {
-  res.json(protocolLogs.slice(-200));
+  res.json(getRecentLogs(200));
 });
 
 // Download the current session log file
 app.get('/api/logs/download', (req, res) => {
-  if (fs.existsSync(LOG_FILE)) {
-    res.download(LOG_FILE);
+  if (fs.existsSync(logPaths.sessionLog)) {
+    res.download(logPaths.sessionLog);
   } else {
     res.status(404).json({ error: 'No log file yet' });
   }
@@ -606,8 +565,8 @@ app.get('/api/logs/download', (req, res) => {
 
 // Download the JSONL structured log
 app.get('/api/logs/download-json', (req, res) => {
-  if (fs.existsSync(LOG_FILE_JSON)) {
-    res.download(LOG_FILE_JSON);
+  if (fs.existsSync(logPaths.sessionJson)) {
+    res.download(logPaths.sessionJson);
   } else {
     res.status(404).json({ error: 'No log file yet' });
   }
@@ -615,13 +574,13 @@ app.get('/api/logs/download-json', (req, res) => {
 
 // List all saved log files
 app.get('/api/logs/list', (req, res) => {
-  if (!fs.existsSync(LOG_DIR)) return res.json([]);
-  const files = fs.readdirSync(LOG_DIR)
+  if (!fs.existsSync(logPaths.logDir)) return res.json([]);
+  const files = fs.readdirSync(logPaths.logDir)
     .filter(f => f.startsWith('session-') && f.endsWith('.log'))
     .map(f => ({
       name: f,
-      size: fs.statSync(path.join(LOG_DIR, f)).size,
-      modified: fs.statSync(path.join(LOG_DIR, f)).mtime,
+      size: fs.statSync(path.join(logPaths.logDir, f)).size,
+      modified: fs.statSync(path.join(logPaths.logDir, f)).mtime,
     }))
     .sort((a, b) => b.modified - a.modified);
   res.json(files);
@@ -666,7 +625,7 @@ wss.on('connection', (ws) => {
   plog('info', 'GUI client connected via WebSocket');
   // Send current state + recent logs
   ws.send(JSON.stringify({ type: 'state', status: connectionStatus, console: connectedConsole, inputReady, lastError, channelStatus: getChannelStatus() }));
-  protocolLogs.slice(-config.websocketLogReplayCount).forEach(entry => {
+  getRecentLogs(config.websocketLogReplayCount).forEach(entry => {
     ws.send(JSON.stringify({ type: 'log', ...entry }));
   });
 
@@ -711,10 +670,6 @@ wss.on('connection', (ws) => {
   });
 });
 
-// ── Start ──────────────────────────────────────────────
-// Clear latest.log for this new session
-try { fs.writeFileSync(LATEST_LOG, ''); fs.writeFileSync(LATEST_JSON, ''); } catch(e) {}
-
 const PORT = config.port;
 server.listen(PORT, () => {
   console.log(`
@@ -724,9 +679,9 @@ server.listen(PORT, () => {
 ║   http://localhost:${PORT}                                 ║
 ║                                                          ║
 ║   📝 Logs saved to:                                      ║
-║   ${LOG_FILE.padEnd(55)}║
+║   ${logPaths.sessionLog.padEnd(55)}║
 ║                                                          ║
-║   Also: ${LOG_DIR}/latest.log                  ║
+║   Also: ${logPaths.latestLog}                  ║
 ╚══════════════════════════════════════════════════════════╝
   `);
 });
