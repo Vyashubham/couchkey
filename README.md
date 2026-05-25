@@ -1,91 +1,187 @@
-# Xbox Remote Control — Demo v0.1
+# xbox-keyboard
 
-Control your Xbox Series X|S or Xbox One from your laptop's keyboard over WiFi.
-No extra hardware needed — just your laptop and Xbox on the same network.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D14-brightgreen)](https://nodejs.org/)
 
-## What it does
+> Control your Xbox Series X|S or Xbox One from your laptop keyboard over your local network.
+> No mobile app. No controller. No Microsoft account login. Just `npm start` and open a browser tab.
 
-- **D-pad navigation** via arrow keys
-- **A/B/X/Y buttons** via Enter/Backspace/X/Y keys
-- **Xbox Guide / View / Menu** via Escape/Tab/M
-- **Macros** — one keystroke for multi-step actions (open search, take screenshot, etc.)
-- **Media controls** — play/pause/skip from the GUI
-- **Auto-discovery** — finds your Xbox on the network automatically
-- **Real-time feedback** — buttons light up as you press them
+`xbox-keyboard` is a small Node.js server that speaks the Xbox SmartGlass
+protocol over UDP, serves a tiny web GUI, and bridges keystrokes from your
+browser into gamepad input on your Xbox. Free and open-source — the goal
+is that anyone with a console and a laptop on the same Wi-Fi can use it.
 
-## Prerequisites
+---
 
-1. **Node.js >= 12** installed on your laptop
-2. Your **Xbox and laptop on the same WiFi network**
-3. On your Xbox, enable remote connections:
-   - Go to **Settings → Devices & connections → Remote features**
-   - Turn ON "Enable remote features"  
-   - Under "Xbox app preferences", select **"Allow connections from any device"**
+## Why
 
-## Quick Start
+Sometimes the controller is dead, sometimes you're in bed, sometimes
+you want to type a YouTube search into the Xbox without thumb-clicking
+through the on-screen keyboard. The Xbox mobile app does some of this,
+but it requires a Microsoft account, a phone, and patience for its
+random disconnects. This is the small, local-only alternative.
+
+## Features
+
+- **Auto-discovery** of Xbox consoles on your subnet (UDP broadcast)
+- **Keyboard capture** — toggle with `Ctrl+Shift+K`, your keys become gamepad input
+- **D-pad and face buttons** mapped to arrow keys / Enter / Backspace / X / Y
+- **Xbox / View / Menu** mapped to `Escape` / `Tab` / `M`
+- **Macros** with `Ctrl+G/H/F/S/R/P/Q` for Guide, Home, Search, Screenshot, Record clip, Parties, Quick settings
+- **Text input** — type into the GUI, the Xbox text field updates as you go
+- **Media controls** — Play / Pause / Next / Previous from the GUI
+- **Real-time protocol log** in the GUI for diagnostics
+- **Auto-reconnect** on connection drop
+- Works headless — single Node process, no external services
+
+## Requirements
+
+- **Node.js 14 or newer**
+- **Xbox Series X|S or Xbox One** on the same local network as your computer
+- Xbox setting: **Settings → Devices & connections → Remote features → Xbox app preferences → Allow connections from any device**
+
+## Quick start
 
 ```bash
-# 1. Install dependencies
+git clone https://github.com/Vyashubham/xbox-keyboard.git
+cd xbox-keyboard
 npm install
-
-# 2. Start the server
 npm start
-
-# 3. Open in your browser
-# → http://localhost:3247
 ```
 
-## How to Use
+Then open <http://localhost:3247> in your browser.
 
-1. Open `http://localhost:3247` in your browser
-2. Click **Scan** to auto-discover your Xbox, or type its IP address
-3. Click the discovered Xbox (or click **Connect**)
-4. Press **Ctrl+Shift+K** to capture your keyboard — now your keystrokes go to the Xbox
-5. Use arrow keys, Enter, Backspace, etc. to navigate
-6. Press **Ctrl+Shift+K** again to release the keyboard back to normal
+1. Click **Scan** — your Xbox appears in the list (or paste its IP manually).
+2. Click **Connect**.
+3. Once the channel indicators turn green, click the keyboard capture banner (or press `Ctrl+Shift+K`).
+4. Your keys now control the Xbox. Press `Ctrl+Shift+K` again to release.
 
-## Keyboard Shortcuts (when captured)
+## Keyboard map
 
-| Key           | Xbox Action        |
-|---------------|--------------------|
-| Arrow keys    | D-pad              |
-| Enter         | A (select)         |
-| Backspace     | B (back)           |
-| Escape        | Xbox Guide button  |
-| Tab           | View button        |
-| M             | Menu button        |
-| X             | X button           |
-| Y             | Y button           |
-| Space         | Play/Pause media   |
-| Ctrl+G        | Open Guide         |
-| Ctrl+H        | Go Home            |
-| Ctrl+F        | Open Search        |
-| Ctrl+S        | Screenshot         |
-| Ctrl+R        | Record last clip   |
-| Ctrl+P        | Parties & Chats    |
-| Ctrl+Q        | Quick Settings     |
+When the keyboard is captured (banner is green):
 
-## Technical Details
+| Key            | Xbox action            |
+| -------------- | ---------------------- |
+| `↑ ↓ ← →`      | D-pad                  |
+| `Enter`        | A (select)             |
+| `Backspace`    | B (back)               |
+| `X` / `Y`      | X / Y                  |
+| `Esc`          | Xbox / Guide (nexus)   |
+| `Tab`          | View                   |
+| `M`            | Menu                   |
+| `Ctrl+G`       | Open Guide             |
+| `Ctrl+H`       | Go Home                |
+| `Ctrl+F`       | Open Search            |
+| `Ctrl+S`       | Take Screenshot        |
+| `Ctrl+R`       | Record last clip       |
+| `Ctrl+P`       | Parties & Chats        |
+| `Ctrl+Q`       | Quick Settings         |
 
-- Uses the **SmartGlass protocol** (UDP port 5050) — the same protocol the Xbox mobile app uses
-- **Anonymous connection** — no Microsoft account login needed
-- Latency: ~1-5ms over LAN (near-instant)
-- Node.js backend connects to Xbox, serves web GUI, bridges input via WebSocket
+For text fields on the Xbox, click into the text box in the GUI and type
+normally. Enter submits, Esc cancels.
+
+## Configuration
+
+All knobs are environment variables. Set them before `npm start`:
+
+| Variable                              | Default | What it does                                         |
+| ------------------------------------- | ------: | ---------------------------------------------------- |
+| `PORT`                                |  `3247` | HTTP/WebSocket port                                  |
+| `BUTTON_MIN_INTERVAL_MS`              |   `150` | Min ms between gamepad sends (rate limit)            |
+| `RECONNECT_DELAY_MS`                  |  `5000` | Wait before auto-reconnect after disconnect          |
+| `HEARTBEAT_TIMEOUT_SEC`               |    `30` | Seconds of silence before declaring the link dead    |
+| `HEARTBEAT_KEEPALIVE_AFTER_SEC`       |     `3` | Start sending keep-alives after this much silence    |
+| `HEARTBEAT_KEEPALIVE_INTERVAL_SEC`    |     `2` | Re-send keep-alives at this interval                 |
+| `LOG_DIR`                             | `./logs`| Where session logs are written                       |
+| `SMARTGLASS_DEBUG`                    |   `(on)`| `0` to silence the library's debug output            |
+
+## How it works
+
+```
+┌────────────┐   WebSocket    ┌──────────────┐   UDP 5050 (SmartGlass)   ┌──────────┐
+│  Browser   │ ◀────────────▶ │ Node server  │ ◀───────────────────────▶ │   Xbox   │
+│ (capture)  │                │ (this repo)  │   AES-128-CBC + HMAC      │          │
+└────────────┘                └──────────────┘                           └──────────┘
+```
+
+- The server uses [`xbox-smartglass-core-node`](https://github.com/unknownskl/xbox-smartglass-core-node)
+  for discovery, the ECDH handshake, and the AES + HMAC layer
+- After connecting, the server opens three SmartGlass channels —
+  `SystemInput` (gamepad), `SystemMedia` (transport), and `SystemText` (text)
+- Series X consoles do not send the `console_status` broadcast that
+  the library uses to trigger channel opening, so the server opens the
+  channels manually (see `src/protocol/channels.js`)
+- The `SystemText` channel is not implemented in the library at all, so
+  the server builds the raw `SystemTextInput` / `SystemTextAcknowledge` /
+  `SystemTextDone` packets itself (see `src/protocol/packets.js`)
+- A custom heartbeat (`src/xbox/heartbeat.js`) replaces the library's
+  aggressive 8-second timeout so rapid input bursts don't trigger
+  false disconnects
+
+For a deeper writeup of the protocol details, see [docs/PROTOCOL.md](docs/PROTOCOL.md).
+
+## Project layout
+
+```
+server.js                    Entry point: builds HTTP + WS, wires modules, listens
+public/index.html            The GUI (single file, no build step)
+src/
+  config.js                  All tunables (env-driven)
+  state.js                   Shared mutable connection / text-channel state
+  bus.js                     EventEmitter that decouples domain modules from transports
+  logger.js                  Protocol logger: ring buffer + per-session files + bus events
+  macros.js                  Multi-step button sequences
+  protocol/
+    packets.js               Raw SmartGlass text-channel packet builders
+    channels.js              Channel-open dance (Series X workaround)
+    helpers.js               parseConnectionError, summarizeEventData
+  xbox/
+    connection.js            discoverConsoles / connectToConsole / scheduleReconnect / disconnect
+    heartbeat.js             Custom keep-alive interval (replaces library default)
+    input.js                 sendButton / runMacro / sendMediaCommand
+    text.js                  sendText / submitText / cancelText
+  server/
+    http.js                  Express routes (/api/status, /api/discover, etc.)
+    ws.js                    WebSocket: bus -> broadcast, inbound message dispatch
+```
 
 ## Troubleshooting
 
 **"No consoles found"**
-- Is your Xbox powered on (not in standby)?
-- Are both devices on the same WiFi network/subnet?
-- Try entering the Xbox's IP directly (Settings → General → Network settings)
+Make sure the Xbox is fully on (not standby) and on the same Wi-Fi
+subnet as your laptop. Some routers isolate guest networks — both
+devices must share one. If discovery still fails, look up the Xbox IP
+in **Settings → General → Network settings → Advanced** and paste it
+into the IP field directly.
 
-**"No anonymous connections"**
-- Go to Xbox Settings → Devices & connections → Remote features
-- Set "Xbox app preferences" to "Allow connections from any device"
+**"Xbox is blocking anonymous connections"**
+On the Xbox, go to **Settings → Devices & connections → Remote features**
+and change **Xbox app preferences** to **Allow connections from any device**.
 
 **"SmartGlass is disabled"**
-- Enable Remote features in Xbox Settings → Devices & connections
+Same screen as above — turn on **Enable remote features**.
 
-**Connection drops frequently**
-- Check WiFi signal strength on both devices
-- The app auto-reconnects after 3 seconds
+**Connection drops during heavy input**
+The custom heartbeat (`HEARTBEAT_TIMEOUT_SEC`, default 30) is lenient,
+but you can extend it further:
+`HEARTBEAT_TIMEOUT_SEC=60 npm start`. Also try raising
+`BUTTON_MIN_INTERVAL_MS` to 200 if your network is slow.
+
+**Text input doesn't appear on Xbox**
+The Xbox needs a text field to be in focus on screen for the text
+channel to be active. Open a text box on the console (search bar,
+search field in an app) before typing in the GUI.
+
+## Contributing
+
+Issues and pull requests welcome. See [CONTRIBUTING.md](CONTRIBUTING.md)
+for the development workflow and a tour of the codebase.
+
+## Credits
+
+- [`xbox-smartglass-core-node`](https://github.com/unknownskl/xbox-smartglass-core-node) by unknownskl — the Node SmartGlass library this builds on
+- [`OpenXbox/xbox-smartglass-csharp`](https://github.com/OpenXbox/xbox-smartglass-csharp) — reference implementation in C# that documents the on-the-wire format for the text channel
+
+## License
+
+MIT — see [LICENSE](LICENSE).
