@@ -16,24 +16,9 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// ── State ──────────────────────────────────────────────
-let sgClient = null;
-let connectionStatus = 'disconnected';
-let connectedConsole = null;
-let lastError = null;
-let inputReady = false;
-let reconnectTimer = null;
-
-// ── Text channel state ─────────────────────────────────
-let textChannelId = null;
-let textChannelOpen = false;
-let textSessionId = 0;
-let textVersion = 0;
-let currentText = '';
-let textSessionActive = false;
-
 const fs = require('fs');
 const bus = require('./src/bus');
+const state = require('./src/state');
 const { plog, getRecentLogs, paths: logPaths } = require('./src/logger');
 const MACROS = require('./src/macros');
 
@@ -50,40 +35,13 @@ function broadcast(obj) {
 }
 
 function broadcastState() {
-  broadcast({
-    type: 'state',
-    status: connectionStatus,
-    console: connectedConsole,
-    inputReady,
-    lastError,
-    activeApp: sgClient ? sgClient.getActiveApp() : null,
-    channelStatus: getChannelStatus(),
-  });
-}
-
-function getChannelStatus() {
-  if (!sgClient) return {};
-  const result = {};
-  for (const name of Object.keys(sgClient._managers)) {
-    const mgr = sgClient._managers[name];
-    result[name] = {
-      status: mgr._channel_manager ? mgr._channel_manager.getStatus() : 'unknown',
-      channelId: mgr._channel_manager ? mgr._channel_manager._channel_server_id : null,
-      clientId: mgr._channel_manager ? mgr._channel_manager._channel_client_id : null,
-    };
-  }
-  result.system_text = {
-    status: textChannelOpen,
-    channelId: textChannelId ? Buffer.from(textChannelId).toString('hex') : null,
-    sessionActive: textSessionActive,
-  };
-  return result;
+  broadcast({ type: 'state', ...state.snapshot() });
 }
 
 // ── SmartGlass functions ───────────────────────────────
 async function discoverConsoles(ip) {
-  connectionStatus = 'discovering';
-  lastError = null;
+  state.connectionStatus = 'discovering';
+  state.lastError = null;
   broadcastState();
   plog('info', `Starting discovery${ip ? ' at ' + ip : ' (broadcast)'}...`);
 
@@ -110,35 +68,31 @@ async function discoverConsoles(ip) {
   });
 }
 
-// Track connection generation to prevent stale clients from interfering
-let connectionGeneration = 0;
-let channelCheckInterval = null;
-
 async function connectToConsole(ip) {
   // Increment generation — any callbacks from old connections will check this
-  connectionGeneration++;
-  const myGeneration = connectionGeneration;
+  state.connectionGeneration++;
+  const myGeneration = state.connectionGeneration;
 
   // Clean up old client
-  if (channelCheckInterval) { clearInterval(channelCheckInterval); channelCheckInterval = null; }
-  if (sgClient) {
+  if (state.channelCheckInterval) { clearInterval(state.channelCheckInterval); state.channelCheckInterval = null; }
+  if (state.sgClient) {
     plog('info', 'Disconnecting previous client...');
-    try { sgClient.disconnect(); } catch (e) {}
-    sgClient = null;
+    try { state.sgClient.disconnect(); } catch (e) {}
+    state.sgClient = null;
   }
 
-  connectionStatus = 'connecting';
-  lastError = null;
-  inputReady = false;
+  state.connectionStatus = 'connecting';
+  state.lastError = null;
+  state.inputReady = false;
   broadcastState();
 
   plog('info', `[gen:${myGeneration}] Creating SmartGlass client and connecting to ${ip}...`);
   
-  sgClient = Smartglass();
+  state.sgClient = Smartglass();
   
   // ── Hook into ALL events for deep logging ──
-  const originalEmit = sgClient._events.emit.bind(sgClient._events);
-  sgClient._events.emit = function(eventName, ...args) {
+  const originalEmit = state.sgClient._events.emit.bind(state.sgClient._events);
+  state.sgClient._events.emit = function(eventName, ...args) {
     if (eventName !== 'newListener' && eventName !== 'receive') {
       plog('proto', `Event: ${eventName}`, summarizeEventData(eventName, args));
     }
@@ -147,19 +101,19 @@ async function connectToConsole(ip) {
 
   // Add managers BEFORE connect — this is critical
   plog('info', 'Adding SystemInput channel manager...');
-  sgClient.addManager('system_input', SystemInputChannel());
+  state.sgClient.addManager('system_input', SystemInputChannel());
   plog('info', 'Adding SystemMedia channel manager...');
-  sgClient.addManager('system_media', SystemMediaChannel());
+  state.sgClient.addManager('system_media', SystemMediaChannel());
 
   plog('info', `Managers added. Starting connect to ${ip}...`);
 
   return new Promise((resolve, reject) => {
-    sgClient.connect(ip).then(() => {
-      connectionStatus = 'connected';
-      connectedConsole = { ip };
-      lastError = null;
+    state.sgClient.connect(ip).then(() => {
+      state.connectionStatus = 'connected';
+      state.connectedConsole = { ip };
+      state.lastError = null;
 
-      plog('ok', `SmartGlass connect() resolved. Connection status: ${sgClient.isConnected()}`);
+      plog('ok', `SmartGlass connect() resolved. Connection status: ${state.sgClient.isConnected()}`);
       
       // Setup text event listeners
       setupTextEventListeners();
@@ -174,40 +128,40 @@ async function connectToConsole(ip) {
       }, config.forceOpenChannelDelayMs);
 
       // Also listen for _on_console_status in case it DOES fire (Xbox One, or future firmware)
-      sgClient._events.on('_on_console_status', () => {
+      state.sgClient._events.on('_on_console_status', () => {
         plog('ok', 'console_status received! (Library will handle channel opening automatically)');
       });
 
       // Monitor channel status periodically
       let checkCount = 0;
-      channelCheckInterval = setInterval(() => {
+      state.channelCheckInterval = setInterval(() => {
         // Bail if a newer connection replaced us
-        if (myGeneration !== connectionGeneration) {
-          clearInterval(channelCheckInterval);
+        if (myGeneration !== state.connectionGeneration) {
+          clearInterval(state.channelCheckInterval);
           return;
         }
         checkCount++;
-        const cs = getChannelStatus();
+        const cs = state.getChannelStatus();
         
         if (checkCount <= 3 || checkCount % 5 === 0) {
           plog('info', `[gen:${myGeneration}] Channel check #${checkCount}:`, cs);
         }
 
         const allReady = Object.values(cs).every(c => c.status === true);
-        if (allReady && !inputReady) {
-          inputReady = true;
+        if (allReady && !state.inputReady) {
+          state.inputReady = true;
           plog('ok', `[gen:${myGeneration}] 🎮 ALL CHANNELS READY — input is now active!`);
           broadcastState();
-          clearInterval(channelCheckInterval);
-          channelCheckInterval = null;
+          clearInterval(state.channelCheckInterval);
+          state.channelCheckInterval = null;
         }
 
         if (checkCount >= config.channelMonitorMaxChecks) {
-          clearInterval(channelCheckInterval);
-          channelCheckInterval = null;
-          if (!inputReady) {
+          clearInterval(state.channelCheckInterval);
+          state.channelCheckInterval = null;
+          if (!state.inputReady) {
             plog('warn', `[gen:${myGeneration}] Channels did not open after 20s.`, cs);
-            inputReady = true;
+            state.inputReady = true;
             broadcastState();
           }
         }
@@ -217,22 +171,22 @@ async function connectToConsole(ip) {
       broadcastState();
 
       // Monitor for disconnection
-      sgClient._events.on('_on_timeout', () => {
-        if (myGeneration !== connectionGeneration) return; // stale
+      state.sgClient._events.on('_on_timeout', () => {
+        if (myGeneration !== state.connectionGeneration) return; // stale
         plog('err', `[gen:${myGeneration}] Connection timeout! Will reconnect in 3s...`);
-        connectionStatus = 'disconnected';
-        inputReady = false;
-        if (channelCheckInterval) { clearInterval(channelCheckInterval); channelCheckInterval = null; }
+        state.connectionStatus = 'disconnected';
+        state.inputReady = false;
+        if (state.channelCheckInterval) { clearInterval(state.channelCheckInterval); state.channelCheckInterval = null; }
         broadcastState();
         scheduleReconnect(ip);
       });
 
       resolve();
     }).catch(err => {
-      connectionStatus = 'disconnected';
-      lastError = parseConnectionError(err);
-      inputReady = false;
-      plog('err', `Connection failed: ${lastError}`, err);
+      state.connectionStatus = 'disconnected';
+      state.lastError = parseConnectionError(err);
+      state.inputReady = false;
+      plog('err', `Connection failed: ${state.lastError}`, err);
       broadcastState();
       reject(err);
     });
@@ -241,13 +195,13 @@ async function connectToConsole(ip) {
 
 // ── Force-open channels without waiting for console_status ──
 function forceOpenChannels() {
-  if (!sgClient || !sgClient._console) {
+  if (!state.sgClient || !state.sgClient._console) {
     plog('err', 'Cannot force open channels: no console connection');
     return;
   }
 
   const Packer = require('xbox-smartglass-core-node/src/packet/packer');
-  const xbox = sgClient._console;
+  const xbox = state.sgClient._console;
 
   // Channel service UUIDs (from the protocol documentation)
   const channels = [
@@ -257,7 +211,7 @@ function forceOpenChannels() {
   ];
 
   // Listen for channel responses
-  sgClient._events.on('_on_start_channel_response', function(response) {
+  state.sgClient._events.on('_on_start_channel_response', function(response) {
     try {
       const payload = response.packet_decoded.protected_payload;
       plog('proto', `Channel response received:`, {
@@ -272,15 +226,15 @@ function forceOpenChannels() {
         if (chInfo) {
           if (chInfo.name === 'SystemText') {
             // Text channel doesn't have a library manager, we track it ourselves
-            textChannelId = payload.target_channel_id;
-            textChannelOpen = true;
+            state.textChannelId = payload.target_channel_id;
+            state.textChannelOpen = true;
             plog('ok', `✅ Channel 'SystemText' is NOW OPEN (channelId: ${Buffer.from(payload.target_channel_id).toString('hex')})`);
           } else {
-            const mgr = sgClient.getManager(chInfo.name === 'SystemInput' ? 'system_input' : 'system_media');
+            const mgr = state.sgClient.getManager(chInfo.name === 'SystemInput' ? 'system_input' : 'system_media');
             if (mgr && mgr._channel_manager) {
               mgr._channel_manager._channel_status = true;
               mgr._channel_manager._channel_server_id = payload.target_channel_id;
-              mgr._channel_manager._smartglass = sgClient;
+              mgr._channel_manager._smartglass = state.sgClient;
               plog('ok', `✅ Channel '${chInfo.name}' is NOW OPEN (channelId: ${Buffer.from(payload.target_channel_id).toString('hex')})`);
             }
           }
@@ -308,7 +262,7 @@ function forceOpenChannels() {
         xbox.get_requestnum();
         var message = channel_request.pack(xbox);
 
-        sgClient._send(message);
+        state.sgClient._send(message);
         plog('ok', `Channel request sent for ${ch.name}`);
       } catch (e) {
         plog('err', `Failed to send channel request for ${ch.name}: ${e.message}`, e.stack);
@@ -320,27 +274,27 @@ function forceOpenChannels() {
 const { buildTextInputPacket, buildTextDonePacket } = require('./src/protocol/packets');
 
 async function sendText(text) {
-  if (!sgClient || !textChannelOpen) {
+  if (!state.sgClient || !state.textChannelOpen) {
     return { ok: false, error: 'Text channel not open. Navigate to a text field on Xbox first.' };
   }
   
   plog('info', `Sending text: "${text}"`);
   
   try {
-    textVersion++;
-    currentText = text;
+    state.textVersion++;
+    state.currentText = text;
     
-    sgClient._console.get_requestnum();
+    state.sgClient._console.get_requestnum();
     const packet = buildTextInputPacket({
-      xbox: sgClient._console,
-      channelId: textChannelId,
+      xbox: state.sgClient._console,
+      channelId: state.textChannelId,
       text,
-      sessionId: textSessionId,
-      version: textVersion,
+      sessionId: state.textSessionId,
+      version: state.textVersion,
     });
 
-    sgClient._send(packet);
-    plog('ok', `Text sent: "${text}" (session: ${textSessionId}, version: ${textVersion})`);
+    state.sgClient._send(packet);
+    plog('ok', `Text sent: "${text}" (session: ${state.textSessionId}, version: ${state.textVersion})`);
     
     return { ok: true, text };
   } catch (e) {
@@ -350,24 +304,24 @@ async function sendText(text) {
 }
 
 async function submitText() {
-  if (!sgClient || !textChannelOpen) {
+  if (!state.sgClient || !state.textChannelOpen) {
     return { ok: false, error: 'Text channel not open' };
   }
   
-  plog('info', `Submitting text (accepting session ${textSessionId})`);
+  plog('info', `Submitting text (accepting session ${state.textSessionId})`);
   
   try {
-    sgClient._console.get_requestnum();
+    state.sgClient._console.get_requestnum();
     const packet = buildTextDonePacket({
-      xbox: sgClient._console,
-      channelId: textChannelId,
-      sessionId: textSessionId,
-      version: textVersion,
+      xbox: state.sgClient._console,
+      channelId: state.textChannelId,
+      sessionId: state.textSessionId,
+      version: state.textVersion,
       result: 0,
     });
 
-    sgClient._send(packet);
-    textSessionActive = false;
+    state.sgClient._send(packet);
+    state.textSessionActive = false;
     plog('ok', 'Text submitted (done with accept)');
     broadcast({ type: 'text_session', active: false });
     
@@ -379,23 +333,23 @@ async function submitText() {
 }
 
 async function cancelText() {
-  if (!sgClient || !textChannelOpen) {
+  if (!state.sgClient || !state.textChannelOpen) {
     return { ok: false, error: 'Text channel not open' };
   }
   
   try {
-    sgClient._console.get_requestnum();
+    state.sgClient._console.get_requestnum();
     const packet = buildTextDonePacket({
-      xbox: sgClient._console,
-      channelId: textChannelId,
-      sessionId: textSessionId,
-      version: textVersion,
+      xbox: state.sgClient._console,
+      channelId: state.textChannelId,
+      sessionId: state.textSessionId,
+      version: state.textVersion,
       result: 1,
     });
 
-    sgClient._send(packet);
-    textSessionActive = false;
-    currentText = '';
+    state.sgClient._send(packet);
+    state.textSessionActive = false;
+    state.currentText = '';
     plog('ok', 'Text cancelled');
     broadcast({ type: 'text_session', active: false });
     
@@ -407,26 +361,26 @@ async function cancelText() {
 
 // Listen for SystemTextConfiguration events (Xbox telling us a text field is active)
 function setupTextEventListeners() {
-  if (!sgClient) return;
+  if (!state.sgClient) return;
   
-  sgClient._events.on('_on_systemtextconfiguration', (message) => {
+  state.sgClient._events.on('_on_systemtextconfiguration', (message) => {
     try {
       const payload = message.packet_decoded.protected_payload || message.packet_decoded.decrypted_payload;
       plog('proto', 'SystemTextConfiguration received!', payload);
-      textSessionActive = true;
+      state.textSessionActive = true;
       // Try to extract session_id from the payload
       if (payload && payload.text_session_id !== undefined) {
-        textSessionId = payload.text_session_id;
+        state.textSessionId = payload.text_session_id;
       }
-      textVersion = 0;
-      currentText = '';
-      broadcast({ type: 'text_session', active: true, sessionId: textSessionId });
+      state.textVersion = 0;
+      state.currentText = '';
+      broadcast({ type: 'text_session', active: true, sessionId: state.textSessionId });
     } catch (e) {
       plog('warn', `Could not parse text config: ${e.message}`);
       // Even if we can't parse it, mark session as active
-      textSessionActive = true;
-      textVersion = 0;
-      currentText = '';
+      state.textSessionActive = true;
+      state.textVersion = 0;
+      state.currentText = '';
       broadcast({ type: 'text_session', active: true });
     }
   });
@@ -435,23 +389,19 @@ function setupTextEventListeners() {
 const { parseConnectionError, summarizeEventData } = require('./src/protocol/helpers');
 
 function scheduleReconnect(ip) {
-  if (reconnectTimer) clearTimeout(reconnectTimer);
-  reconnectTimer = setTimeout(() => {
+  if (state.reconnectTimer) clearTimeout(state.reconnectTimer);
+  state.reconnectTimer = setTimeout(() => {
     plog('info', 'Attempting auto-reconnect...');
     connectToConsole(ip).catch(() => scheduleReconnect(ip));
   }, config.reconnectDelayMs);
 }
 
-// ── Button send with throttle ──────────────────────────
-let lastButtonTime = 0;
 const BUTTON_MIN_INTERVAL = config.buttonMinIntervalMs;
-let buttonQueue = [];
-let buttonProcessing = false;
 
 async function sendButton(button) {
-  if (!sgClient) return { ok: false, error: 'No client' };
+  if (!state.sgClient) return { ok: false, error: 'No client' };
   
-  const mgr = sgClient.getManager('system_input');
+  const mgr = state.sgClient.getManager('system_input');
   if (!mgr) return { ok: false, error: 'No system_input manager' };
   
   const chStatus = mgr._channel_manager ? mgr._channel_manager.getStatus() : false;
@@ -463,11 +413,11 @@ async function sendButton(button) {
 
   // Throttle: wait if we sent too recently
   const now = Date.now();
-  const timeSince = now - lastButtonTime;
+  const timeSince = now - state.lastButtonTime;
   if (timeSince < BUTTON_MIN_INTERVAL) {
     await new Promise(r => setTimeout(r, BUTTON_MIN_INTERVAL - timeSince));
   }
-  lastButtonTime = Date.now();
+  state.lastButtonTime = Date.now();
 
   try {
     await mgr.sendCommand(button);
@@ -492,9 +442,9 @@ async function runMacro(macroName) {
 }
 
 async function sendMediaCommand(cmd) {
-  if (!sgClient) return { ok: false, error: 'Not connected' };
+  if (!state.sgClient) return { ok: false, error: 'Not connected' };
   try {
-    await sgClient.getManager('system_media').sendCommand(cmd);
+    await state.sgClient.getManager('system_media').sendCommand(cmd);
     return { ok: true, cmd };
   } catch (err) {
     return { ok: false, error: err.error || 'Media command failed' };
@@ -506,12 +456,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
 app.get('/api/status', (req, res) => {
-  res.json({
-    status: connectionStatus, console: connectedConsole,
-    inputReady, lastError,
-    activeApp: sgClient ? sgClient.getActiveApp() : null,
-    channelStatus: getChannelStatus(),
-  });
+  res.json(state.snapshot());
 });
 
 app.get('/api/logs', (req, res) => {
@@ -568,18 +513,18 @@ app.post('/api/connect', async (req, res) => {
     await connectToConsole(req.body.ip);
     res.json({ ok: true });
   } catch (err) {
-    res.json({ ok: false, error: lastError || 'Connection failed' });
+    res.json({ ok: false, error: state.lastError || 'Connection failed' });
   }
 });
 
 app.post('/api/disconnect', (req, res) => {
-  if (sgClient) { try { sgClient.disconnect(); } catch (e) {} }
-  if (reconnectTimer) clearTimeout(reconnectTimer);
-  connectionStatus = 'disconnected';
-  inputReady = false; connectedConsole = null;
-  sgClient = null;
-  textChannelOpen = false; textChannelId = null; textSessionActive = false;
-  textVersion = 0; currentText = '';
+  if (state.sgClient) { try { state.sgClient.disconnect(); } catch (e) {} }
+  if (state.reconnectTimer) clearTimeout(state.reconnectTimer);
+  state.connectionStatus = 'disconnected';
+  state.inputReady = false; state.connectedConsole = null;
+  state.sgClient = null;
+  state.textChannelOpen = false; state.textChannelId = null; state.textSessionActive = false;
+  state.textVersion = 0; state.currentText = '';
   broadcastState();
   res.json({ ok: true });
 });
@@ -588,7 +533,7 @@ app.post('/api/disconnect', (req, res) => {
 wss.on('connection', (ws) => {
   plog('info', 'GUI client connected via WebSocket');
   // Send current state + recent logs
-  ws.send(JSON.stringify({ type: 'state', status: connectionStatus, console: connectedConsole, inputReady, lastError, channelStatus: getChannelStatus() }));
+  ws.send(JSON.stringify({ type: 'state', ...state.snapshot() }));
   getRecentLogs(config.websocketLogReplayCount).forEach(entry => {
     ws.send(JSON.stringify({ type: 'log', ...entry }));
   });
