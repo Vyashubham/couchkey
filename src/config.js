@@ -18,6 +18,13 @@ const config = {
   channelOpenStaggerMs: 200,
   forceOpenChannelDelayMs: 500,
 
+  // Custom heartbeat (replaces the library's 4-second-then-die default;
+  // the library is too aggressive when the event loop is saturated by
+  // rapid gamepad input)
+  heartbeatTimeoutSec: parseInt(process.env.HEARTBEAT_TIMEOUT_SEC, 10) || 30,
+  heartbeatKeepAliveAfterSec: parseInt(process.env.HEARTBEAT_KEEPALIVE_AFTER_SEC, 10) || 3,
+  heartbeatKeepAliveIntervalSec: parseInt(process.env.HEARTBEAT_KEEPALIVE_INTERVAL_SEC, 10) || 2,
+
   // Logging
   logDir: process.env.LOG_DIR || path.join(ROOT_DIR, 'logs'),
   protocolLogRingBufferSize: 500,

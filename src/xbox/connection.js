@@ -17,6 +17,7 @@ const { plog } = require('../logger');
 const state = require('../state');
 const { forceOpenChannels } = require('../protocol/channels');
 const { parseConnectionError, summarizeEventData } = require('../protocol/helpers');
+const { installHeartbeat } = require('./heartbeat');
 const { setupTextEventListeners } = require('./text');
 
 function notifyState() {
@@ -150,6 +151,22 @@ async function connectToConsole(ip) {
   state.lastError = null;
   plog('ok', `SmartGlass connect() resolved. Connection status: ${sgClient.isConnected()}`);
 
+  // Replace the library's aggressive 8-second-with-one-keepalive
+  // heartbeat with our configurable, repeatedly-pinging variant.
+  installHeartbeat(sgClient, {
+    onTimeout: () => {
+      if (myGeneration !== state.connectionGeneration) return;
+      state.connectionStatus = 'disconnected';
+      state.inputReady = false;
+      if (state.channelCheckInterval) {
+        clearInterval(state.channelCheckInterval);
+        state.channelCheckInterval = null;
+      }
+      notifyState();
+      scheduleReconnect(ip);
+    },
+  });
+
   setupTextEventListeners();
 
   // Series X workaround: this console never sends an unsolicited
@@ -165,6 +182,9 @@ async function connectToConsole(ip) {
 
   startChannelReadinessMonitor(myGeneration);
 
+  // The library still emits _on_timeout from any pre-existing setInterval
+  // it kept a reference to; keep this listener as a safety net even
+  // though our installHeartbeat above already handles the common case.
   sgClient._events.on('_on_timeout', () => {
     if (myGeneration !== state.connectionGeneration) return;
     plog('err', `[gen:${myGeneration}] Connection timeout — will reconnect in ${config.reconnectDelayMs}ms`);
