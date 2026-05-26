@@ -51,25 +51,37 @@ function sealMessage({ xbox, header, payloadBuf }) {
   return packet;
 }
 
-// SystemTextInput payload (flag 0xF2C). Layout matches the OpenXbox
-// C# reference (SmartGlass/Channels/Text/SystemTextInputMessage):
-//   session_id (u32), version (u32), flags (u16), text (SGString),
-//   delta_offset (u32), delta_length (u32),
-//   selection_start (i32), selection_length (i32)
-// Omitting the four trailing fields makes the Xbox silently drop the
-// input — it acknowledges the packet but never updates the field.
-function buildTextInputPacket({ xbox, channelId, text, sessionId, version }) {
+// SystemTextInput payload (flag 0xF2C). Layout matches OpenXbox C#
+// SystemTextInputMessage.Serialize:
+//   text_session_id        (u32 BE)
+//   base_version           (u32 BE)   the version we believe the field is at
+//   submitted_version      (u32 BE)   the new version after our edit (base + 1)
+//   total_text_bytelength  (u32 BE)   length of the full buffer
+//   selection_start        (i32 BE)   -1 = no selection
+//   selection_length       (i32 BE)   -1 = no selection
+//   flags                  (u16 BE)   0
+//   text_chunk_byte_start  (u32 BE)   0 (we send the entire buffer in one chunk)
+//   text_chunk             (u16-prefixed string)
+//
+// The handoff doc and most copy-paste references on the web have an
+// older / hand-rolled layout (single version field, flags-before-text,
+// delta_offset/delta_length pair). That layout makes the Xbox drop the
+// packet silently — it ACKs the envelope but never reaches the field.
+function buildTextInputPacket({
+  xbox, channelId, text, sessionId, baseVersion, submittedVersion,
+}) {
   if (!xbox || !channelId) throw new Error('buildTextInputPacket: missing xbox or channelId');
 
   const payload = PacketStructure();
   payload.writeUInt32(sessionId);
-  payload.writeUInt32(version);
-  payload.writeUInt16(0);              // flags (0 = full replace)
-  payload.writeSGString(text);         // text chunk
-  payload.writeUInt32(0);              // delta_offset
-  payload.writeUInt32(0);              // delta_length
-  payload.writeInt32(text.length);     // selection_start (cursor at end)
-  payload.writeInt32(0);               // selection_length (no selection)
+  payload.writeUInt32(baseVersion);
+  payload.writeUInt32(submittedVersion);
+  payload.writeUInt32(Buffer.byteLength(text, 'utf8'));   // total_text_bytelength
+  payload.writeInt32(-1);                                  // selection_start
+  payload.writeInt32(-1);                                  // selection_length
+  payload.writeUInt16(0);                                  // flags
+  payload.writeUInt32(0);                                  // text_chunk_byte_start
+  payload.writeSGString(text);                             // text_chunk
 
   const payloadBuf = payload.toBuffer();
   const header = buildMessageHeader({
@@ -103,15 +115,19 @@ function buildTextAckPacket({ xbox, channelId, sessionId, versionAck }) {
   return sealMessage({ xbox, header, payloadBuf });
 }
 
-// SystemTextDone payload (flag 0xF35) — Accept (result=0) or Cancel (result=1)
-// the current text session.
+// SystemTextDone payload (flag 0xF35). Layout matches OpenXbox C#
+// SystemTextDoneMessage.Serialize:
+//   text_session_id  (u32 BE)
+//   text_version     (u32 BE)
+//   flags            (u32 BE)   ← u32, not u16 like the handoff doc claimed
+//   result           (u32 BE)   0 = Accept, 1 = Cancel
 function buildTextDonePacket({ xbox, channelId, sessionId, version, result }) {
   if (!xbox || !channelId) throw new Error('buildTextDonePacket: missing xbox or channelId');
 
   const payload = PacketStructure();
   payload.writeUInt32(sessionId);
   payload.writeUInt32(version);
-  payload.writeUInt16(0);
+  payload.writeUInt32(0);             // flags (u32!)
   payload.writeUInt32(result);
 
   const payloadBuf = payload.toBuffer();

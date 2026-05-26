@@ -1,13 +1,19 @@
 'use strict';
 
 // Text-channel client. The xbox-smartglass-core-node library has no
-// manager for SystemText, so we drive it ourselves:
+// manager for SystemText, so we drive it ourselves. Protocol flow,
+// matching the OpenXbox C# reference (SmartGlass/Channels/TextChannel.cs):
 //
-// - Wait for the Xbox to send SystemTextConfiguration (a text field
-//   gained focus on the console); record the session ID it offers
-// - Push edits with SystemTextInput, incrementing a per-session
-//   version on every send
-// - Finish with SystemTextDone (Accept / Cancel)
+//   Xbox  -> us:  SystemTextConfiguration   (a text field gained focus)
+//                  -> reset version state, store session id
+//   us    -> Xbox: SystemTextInput          (one for every edit)
+//                  base_version = last known
+//                  submitted_version = base + 1
+//   Xbox  -> us:  SystemTextAcknowledge     (Xbox confirms a version)
+//                  -> update our known version
+//   Xbox  -> us:  SystemTextInput           (Xbox tells us its own view)
+//                  -> we must ACK it with SystemTextAcknowledge
+//   us    -> Xbox: SystemTextDone           (Accept / Cancel)
 
 const bus = require('../bus');
 const { plog } = require('../logger');
@@ -35,27 +41,33 @@ async function sendText(text) {
   plog('info', `Sending text: "${text}"`);
 
   try {
-    state.textVersion += 1;
-    state.currentText = text;
-
     const xbox = state.sgClient._console;
     const channelId = state.textChannelId;
     const sessionId = state.textSessionId;
-    const version = state.textVersion;
+    const baseVersion = state.textVersion;
+    const submittedVersion = baseVersion + 1;
 
     xbox.get_requestnum();
-    const inputPacket = buildTextInputPacket({ xbox, channelId, text, sessionId, version });
+    const inputPacket = buildTextInputPacket({
+      xbox, channelId, text, sessionId, baseVersion, submittedVersion,
+    });
+    plog('proto', 'TextInput packet built', {
+      length: inputPacket.length,
+      hex: inputPacket.toString('hex'),
+      base_version: baseVersion,
+      submitted_version: submittedVersion,
+    });
     state.sgClient._send(inputPacket);
 
-    // The C# reference client follows every TextInput with a TextAck
-    // bearing the same version. Without it the Xbox eventually stops
-    // accepting our edits — symptom is text appearing once and then
-    // future sends being silently dropped.
-    xbox.get_requestnum();
-    const ackPacket = buildTextAckPacket({ xbox, channelId, sessionId, versionAck: version });
-    state.sgClient._send(ackPacket);
+    // Advance our local view immediately. The C# reference only updates
+    // on receiving SystemTextAcknowledge, but with rapid typing (one
+    // send per character) we'd send several edits with the same
+    // base_version before any ack lands, which the Xbox treats as a
+    // single update and discards the intermediate states.
+    state.textVersion = submittedVersion;
+    state.currentText = text;
 
-    plog('ok', `Text sent: "${text}" (session ${sessionId}, version ${version})`);
+    plog('ok', `Text sent: "${text}" (session ${sessionId}, base ${baseVersion} -> submitted ${submittedVersion})`);
     return { ok: true, text };
   } catch (e) {
     plog('err', `Text send failed: ${e.message}`, e.stack);
@@ -65,7 +77,7 @@ async function sendText(text) {
 
 async function submitText() {
   if (!state.sgClient || !state.textChannelOpen) return notReadyError();
-  plog('info', `Submitting text (accepting session ${state.textSessionId})`);
+  plog('info', `Submitting text (accepting session ${state.textSessionId} at version ${state.textVersion})`);
 
   try {
     state.sgClient._console.get_requestnum();
@@ -112,31 +124,131 @@ async function cancelText() {
   }
 }
 
-// Subscribe to SystemTextConfiguration events on the current client.
-// Call this after connect() resolves, before any text input is sent.
+// Parse a SystemTextConfiguration payload out of the raw decrypted bytes.
+// The library has no Packet[] schema entry for this message, so its
+// `protected_payload` arrives as an empty object and we have to read
+// the leading fixed-size fields ourselves.
+function parseTextConfiguration(buf) {
+  if (!buf || buf.length < 4) return null;
+  const out = { text_session_id: buf.readUInt32BE(0) };
+  if (buf.length >= 8)  out.text_buffer_version = buf.readUInt32BE(4);
+  if (buf.length >= 12) out.text_options = buf.readUInt32BE(8);
+  if (buf.length >= 16) out.input_scope = buf.readUInt32BE(12);
+  if (buf.length >= 20) out.max_text_length = buf.readInt32BE(16);
+  return out;
+}
+
+// Parse a SystemTextInput payload from the Xbox. Same field layout as
+// our outgoing TextInput, per OpenXbox C# SystemTextInputMessage:
+//   session_id(u32), base(u32), submitted(u32), totalLen(u32),
+//   selStart(i32), selLength(i32), flags(u16), chunkStart(u32),
+//   chunk(SGString)
+function parseSystemTextInput(buf) {
+  if (!buf || buf.length < 28) return null;
+  return {
+    text_session_id: buf.readUInt32BE(0),
+    base_version: buf.readUInt32BE(4),
+    submitted_version: buf.readUInt32BE(8),
+    total_text_bytelength: buf.readUInt32BE(12),
+    selection_start: buf.readInt32BE(16),
+    selection_length: buf.readInt32BE(20),
+    flags: buf.readUInt16BE(24),
+  };
+}
+
+function parseSystemTextAck(buf) {
+  if (!buf || buf.length < 8) return null;
+  return {
+    text_session_id: buf.readUInt32BE(0),
+    text_version_ack: buf.readUInt32BE(4),
+  };
+}
+
+// Send a SystemTextAcknowledge back to the Xbox. We MUST do this every
+// time the Xbox sends us a SystemTextInput (per the C# reference); the
+// Xbox uses our acks to track our view of the buffer version, and if it
+// drifts our subsequent edits get dropped.
+function sendAck(sessionId, versionAck) {
+  if (!state.sgClient || !state.textChannelId) return;
+  try {
+    const xbox = state.sgClient._console;
+    xbox.get_requestnum();
+    const ack = buildTextAckPacket({
+      xbox,
+      channelId: state.textChannelId,
+      sessionId,
+      versionAck,
+    });
+    state.sgClient._send(ack);
+  } catch (e) {
+    plog('warn', `Failed to send SystemTextAcknowledge: ${e.message}`);
+  }
+}
+
 function setupTextEventListeners() {
   if (!state.sgClient) return;
 
   state.sgClient._events.on('_on_systemtextconfiguration', message => {
     try {
-      const payload = message.packet_decoded.protected_payload
-        || message.packet_decoded.decrypted_payload;
-      plog('proto', 'SystemTextConfiguration received', payload);
+      const decoded = message.packet_decoded || {};
+      const raw = decoded.decrypted_payload;
+      const parsed = parseTextConfiguration(raw);
+      plog('proto', 'SystemTextConfiguration received', {
+        ...parsed,
+        raw_length: raw ? raw.length : 0,
+        raw_hex: raw ? raw.toString('hex') : null,
+      });
 
       state.textSessionActive = true;
-      if (payload && payload.text_session_id !== undefined) {
-        state.textSessionId = payload.text_session_id;
+      if (parsed && parsed.text_session_id !== undefined) {
+        state.textSessionId = parsed.text_session_id;
       }
+      // Reset version on every new configuration — matches the C#
+      // reference's ResetSession(). The Xbox's TextBufferVersion in
+      // the config message is not the version we should resume from;
+      // the protocol expects a fresh base of 0 for the new session.
       state.textVersion = 0;
       state.currentText = '';
       emitSession(true, state.textSessionId);
     } catch (e) {
       plog('warn', `Could not parse text config: ${e.message}`);
-      // Activate the session anyway — the GUI can still try to send.
       state.textSessionActive = true;
       state.textVersion = 0;
       state.currentText = '';
       emitSession(true);
+    }
+  });
+
+  // The Xbox broadcasts SystemTextInput when its own internal state of
+  // the focused field changes (e.g. someone typing with a controller
+  // via the on-screen keyboard). We must ACK it, and we update our
+  // local version so subsequent sends from us use a base the Xbox
+  // already knows about.
+  state.sgClient._events.on('_on_systemtextinput', message => {
+    const buf = message.packet_decoded && message.packet_decoded.decrypted_payload;
+    const parsed = parseSystemTextInput(buf);
+    plog('proto', 'Xbox SystemTextInput received', {
+      ...parsed,
+      length: buf ? buf.length : 0,
+      hex: buf ? buf.toString('hex') : null,
+    });
+    if (!parsed) return;
+
+    state.textSessionId = parsed.text_session_id;
+    state.textVersion = parsed.submitted_version;
+    sendAck(parsed.text_session_id, parsed.submitted_version);
+  });
+
+  // SystemTextAcknowledge from the Xbox confirms it processed our edit
+  // up to a specific version. Update our local view so the next send
+  // uses an up-to-date base_version.
+  state.sgClient._events.on('_on_systemtextack', message => {
+    const buf = message.packet_decoded && message.packet_decoded.decrypted_payload;
+    const parsed = parseSystemTextAck(buf);
+    plog('proto', 'Xbox SystemTextAcknowledge received', parsed);
+    if (!parsed) return;
+    if (parsed.text_version_ack > state.textVersion) {
+      state.textVersion = parsed.text_version_ack;
     }
   });
 }
