@@ -39,19 +39,19 @@ with the same titles.
 
 ## M1 — Backbone
 
-**T-101 TypeScript toolchain** (D1)
+**T-101 TypeScript toolchain** (D1) ✅
 - AC: `tsconfig` strict; `npm run typecheck`; build to `dist/`; `npm start` runs built output; `npm run dev` runs with watch; existing JS converted file-by-file without behavior change.
 - Tests: CI typecheck job; existing OSK + gamepad tests pass unchanged after conversion.
 
-**T-102 Test harness**
+**T-102 Test harness** ✅
 - AC: Vitest for unit/integration with coverage report; `npm test` runs unit + integration; coverage thresholds enforced per folder in CI (pure core ≥ 90%), ratcheting the overall threshold up to ≥ 75% as M2 replaces legacy modules. Playwright e2e lands with the new GUI (T-302), since there is nothing worth driving in the legacy page.
 - Tests: a deliberately failing sample test fails CI (verified once, then removed).
 
-**T-103 ConsoleAdapter + SmartGlassAdapter** (D5)
+**T-103 ConsoleAdapter + SmartGlassAdapter** (D5) ✅
 - AC: one interface (`discover`, `connect`, `disconnect`, `openChannels`, `sendGamepad`, `sendMedia`, `sendText*`, events); only `smartglass-adapter.ts` imports the library or touches `_private` fields; lint rule forbids importing the library anywhere else.
 - Tests: contract test suite that both adapters must pass; lint rule test.
 
-**T-104 FakeConsole** (D6)
+**T-104 FakeConsole** (D6) ✅
 - AC: implements the adapter; scriptable (accept/reject connect, drop/ack presses, open text session with given text, report active app); records every call for assertions; also usable as `--demo` mode in the GUI.
 - Tests: passes the adapter contract suite.
 
@@ -88,7 +88,7 @@ with the same titles.
 - Tests: rate limit timing (fake clock), ack timeout path, cancel mid-queue, ordering under load.
 
 **T-203 Macros v2**
-- AC: macros defined as data with per-step delays; fix the duplicated `screenshot`/`open_search`; user-defined macros from settings; macros cancellable.
+- AC: macros defined as data with per-step delays; fix the duplicated `screenshot`/`open_search`; user-defined macros from settings; macros cancellable. Use the library's native `recordGameDvr` for "record that" instead of a timed button macro.
 - Tests: runner with fake clock; definitions validated.
 
 **T-204 TextService (SystemText)**
@@ -115,8 +115,8 @@ with the same titles.
 - AC: each client has a device name and id; state broadcasts include who is connected; app-keyboard typing takes a lock and shows who holds it; optional host lock ("only my devices") and approved-devices mode.
 - Tests: two WS clients: concurrent buttons both delivered; second typer gets a clear "Shubham's phone is typing" error; lock enforcement.
 
-**T-210 Xbox presence and power-on**
-- AC: hub watches for the console (cheap unicast discovery every few seconds), connects when it appears, shows "Xbox is off/asleep" otherwise; "Turn on Xbox" uses the SmartGlass power-on packet with the live id remembered from the last discovery.
+**T-210 Xbox presence and power-on/off**
+- AC: power off via the library's `powerOff`; hub watches for the console (cheap unicast discovery every few seconds), connects when it appears, shows "Xbox is off/asleep" otherwise; "Turn on Xbox" uses the SmartGlass power-on packet with the live id remembered from the last discovery.
 - Tests: FakeConsole appear/disappear cycles; power-on packet builder against a known-good fixture.
 
 ---
@@ -154,7 +154,7 @@ with the same titles.
 
 **T-401 Hardware test protocol** — a written checklist + a `npm run hw-check` script that runs safe probes (speed test, ack test) and writes a report.
 
-**T-402 Verify input details** — acks on gamepad messages, safe press gap, Menu/View mapping, held-key repeat.
+**T-402 Verify input details** — acks on gamepad messages, safe press gap, Menu/View mapping, held-key repeat, and non-ASCII text in Edge (we now send the UTF-8 byte length in SmartGlass strings; the library sent the character count).
 
 **T-403 Verify app layouts** — YouTube, Netflix, system keyboard; record title IDs for automatic layout choice; mark `verified: true`.
 

@@ -22,7 +22,7 @@ const {
   buildTextInputPacket,
   buildTextAckPacket,
   buildTextDonePacket,
-} = require('../protocol/packets');
+} = require('../console/smartglass/packets');
 
 const TEXT_DONE_ACCEPT = 0;
 const TEXT_DONE_CANCEL = 1;

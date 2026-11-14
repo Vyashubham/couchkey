@@ -16,57 +16,19 @@
 const config = require('../config');
 const { plog } = require('../logger');
 const state = require('../state');
-const { buildGamepadPacket } = require('../protocol/packets');
+const { buildGamepadPacket } = require('../console/smartglass/packets');
+const { AckTracker } = require('../console/smartglass/ack-tracker');
+const { BUTTON_MASKS: BUTTONS } = require('../console/types');
 
-// Same values the library uses, plus shoulders and stick clicks from
-// the SmartGlass gamepad bitmask. NOTE: OpenXbox docs list Menu = 4 and
-// View = 8; the library has them the other way round. Kept as the
-// library has it until checked on a console.
-const BUTTONS = {
-  nexus: 2,
-  view: 4,
-  menu: 8,
-  a: 16,
-  b: 32,
-  x: 64,
-  y: 128,
-  up: 256,
-  down: 512,
-  left: 1024,
-  right: 2048,
-  left_shoulder: 4096,
-  right_shoulder: 8192,
-  left_thumbstick: 16384,
-  right_thumbstick: 32768,
-};
 
-const pending = new Map(); // sequence number -> { resolve, timer }
-let listenerFor = null;    // sgClient the ack listener is attached to
+const acks = new AckTracker();
+let listenerFor = null; // sgClient the ack listener is attached to
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-function settle(seq, ok) {
-  const p = pending.get(seq);
-  if (!p) return;
-  clearTimeout(p.timer);
-  pending.delete(seq);
-  p.resolve(ok);
-}
-
-function onAcknowledge(message) {
-  const body = message && message.packet_decoded && message.packet_decoded.protected_payload;
-  if (!body || typeof body !== 'object') return;
-  for (const r of body.rejected_list || []) settle(r.id, false);
-  for (const r of body.processed_list || []) settle(r.id, true);
-  // Everything at or below the low watermark has been processed too.
-  if (typeof body.low_watermark === 'number') {
-    for (const seq of [...pending.keys()]) if (seq <= body.low_watermark) settle(seq, true);
-  }
-}
-
 function ensureListener() {
   if (listenerFor === state.sgClient) return;
-  state.sgClient._events.on('_on_acknowledge', onAcknowledge);
+  state.sgClient._events.on('_on_acknowledge', m => acks.handle(m && m.packet_decoded && m.packet_decoded.protected_payload));
   listenerFor = state.sgClient;
 }
 
@@ -79,19 +41,17 @@ function inputChannel() {
 
 // Send one gamepad state and wait for the Xbox to confirm it.
 // Resolves to true (processed), false (rejected) or null (timed out).
-function sendState(buttons) {
+async function sendState(buttons) {
   const channelId = inputChannel();
-  if (!channelId) return Promise.resolve(null);
+  if (!channelId) return null;
   const xbox = state.sgClient._console;
   xbox.get_requestnum();
   const seq = xbox._request_num;
   const packet = buildGamepadPacket({ xbox, channelId, buttons, needAck: true });
-
-  return new Promise(resolve => {
-    const timer = setTimeout(() => { pending.delete(seq); resolve(null); }, config.gamepadAckTimeoutMs);
-    pending.set(seq, { resolve, timer });
-    state.sgClient._send(packet);
-  });
+  const outcome = acks.track(seq, config.gamepadAckTimeoutMs);
+  state.sgClient._send(packet);
+  const o = await outcome;
+  return o === 'confirmed' ? true : o === 'rejected' ? false : null;
 }
 
 async function sendButtonAcked(button) {
@@ -124,8 +84,5 @@ async function sendButtonAcked(button) {
 }
 
 module.exports = {
-  BUTTONS,
   sendButtonAcked,
-  _onAcknowledge: onAcknowledge, // for tests
-  _pending: pending,
 };

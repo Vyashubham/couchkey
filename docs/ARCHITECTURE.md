@@ -24,7 +24,7 @@ Why there is no "real keyboard" path without hardware is written up in
 
 ---
 
-## 2. Current structure (as of Nov 2026)
+## 2. Current structure (as of Nov 2026, before M1)
 
 ```
 Browser (public/index.html: one file, inline CSS + JS, globals)
@@ -141,6 +141,16 @@ test/
   integration/             services + server against FakeConsole
   e2e/                     browser tests against server + FakeConsole
 ```
+
+### Progress
+
+- `src/console/` exists: `types.ts` (the `ConsoleAdapter` contract),
+  `fake-console.ts`, `smartglass/` (adapter, packets, channels,
+  heartbeat, ack tracker, text codec). A lint rule blocks the library
+  everywhere else except `src/xbox/connection.js`, which M2 removes.
+- Legacy `src/xbox/*.js` services still drive the app; they reuse the
+  shared smartglass pieces, so there is one implementation of each
+  packet and of the channel handshake.
 
 ### Data flow (target)
 

@@ -33,6 +33,26 @@ export default tseslint.config(
       '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true }],
     },
   },
+  // Only the SmartGlass adapter may use the protocol library (ROADMAP T-103).
+  // Legacy files listed here are removed during M2; don't add to this list.
+  {
+    files: ['**/*.{ts,js}'],
+    ignores: [
+      'src/console/smartglass/**',
+      'types/**',
+      'test/**/smartglass/**',
+      'src/xbox/connection.js', // legacy, M2
+    ],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [{ group: ['xbox-smartglass-core-node', 'xbox-smartglass-core-node/*'], message: 'Only src/console/smartglass/ may use the SmartGlass library. Use a ConsoleAdapter.' }],
+      }],
+      'no-restricted-syntax': ['error', {
+        selector: "CallExpression[callee.name='require'][arguments.0.value=/^xbox-smartglass-core-node/]",
+        message: 'Only src/console/smartglass/ may use the SmartGlass library. Use a ConsoleAdapter.',
+      }],
+    },
+  },
   {
     files: ['eslint.config.mjs'],
     languageOptions: { globals: globals.node },

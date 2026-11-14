@@ -44,9 +44,11 @@ Config is env-driven: see `.env.example` and `src/config.js`.
   importing I/O modules, so code stays testable without a console.
 - Domain code (`src/xbox`, `src/protocol`, `src/osk`) must not import from
   `src/server`. Talk to the GUI through the event bus (`src/bus.js`).
-- Touching `xbox-smartglass-core-node` private fields (`_events`,
-  `_console`, `_send`, `_channel_manager`, …) is legacy debt. Don't add new
-  call sites; the target is a single adapter (ROADMAP T-103).
+- Only `src/console/smartglass/` may import `xbox-smartglass-core-node`
+  or touch its private fields (lint-enforced). Everything else uses the
+  `ConsoleAdapter` interface from `src/console`; tests use `FakeConsole`.
+- New adapter behavior goes in `test/contract/console-adapter.contract.ts`
+  so both the fake and the real adapter are held to it.
 - Pure logic (planning, mapping, version bookkeeping) goes in modules with
   no I/O so it can be unit tested.
 - Never log typed text, console certificates, or crypto keys. Log lengths
