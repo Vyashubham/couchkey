@@ -21,9 +21,14 @@ npm install
 npm start
 ```
 
-That's it — there's no build step, no compile, no bundler. Edits to
-`server.js` or `src/*.js` need a restart; edits to `public/index.html`
-just need a browser refresh.
+Requires Node.js 22.9 or newer. To change settings, copy `.env.example`
+to `.env`; `npm start` picks it up.
+
+There's no build step yet. Edits to `server.js` or `src/*.js` need a
+restart; edits to `public/index.html` just need a browser refresh.
+
+Before you start larger work, read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+and pick (or propose) a ticket in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Where things live
 
@@ -41,24 +46,42 @@ short version. Two notes:
 
 ## Testing changes
 
-There's no automated test suite yet (PRs to add one are welcome). For
-now, the smoke test loop is:
+We work test-first: write a failing test, make it pass, then clean up.
 
-1. `node -c server.js` and every module under `src/` — parse check.
-2. `npm start` — the banner should print without errors.
-3. Open <http://localhost:3247>, connect to your Xbox, exercise the
+```bash
+npm test          # unit tests (node:test, in test/)
+npm run lint
+npm run check     # both; CI runs the same on Node 22, 24 and 26
+```
+
+Then a manual check:
+
+1. `npm start` — the banner should print without errors.
+2. Open <http://localhost:3247>, connect to your Xbox, exercise the
    thing you changed. Watch `logs/latest.log` for protocol errors.
 
 When changing anything in `src/protocol/`, please verify on real
 hardware before opening a PR — the packet layouts and channel
 behaviors are not documented anywhere we can lint against.
 
-## Commit style
+## Branches and commits
 
-- Imperative subject line, < 70 chars (`Add foo`, not `Added foo`).
-- Body explains *why*. The diff already shows *what*.
-- One logical change per commit. If you're touching three unrelated
-  things, that's three commits.
+- Don't commit to `main`. Work on a branch named `feature/<name>`,
+  `fix/<name>`, `chore/<name>`, or `docs/<name>` and open a pull request.
+- Use [Conventional Commits](https://www.conventionalcommits.org/):
+  `feat(osk): add Prime Video layout`, `fix(ui): keep panel width`,
+  `docs: …`, `test: …`, `refactor: …`, `chore: …`.
+- Subject under 72 characters; the body explains *why*.
+- One logical change per commit, one ticket per PR.
+- Add user-visible changes to `CHANGELOG.md` under *Unreleased*.
+
+## Easiest first contribution: an app keyboard layout
+
+If an app on your Xbox has its own on-screen keyboard, you can teach
+xbox-keyboard to type into it. Take a photo of the keyboard, write a
+`layouts/<app>.json` (format at the top of `src/osk/layout.js`, examples in
+`layouts/`), add a planner test, and test it on your console. Set
+`"verified": true` only once it typed correctly.
 
 ## Adding new features
 
@@ -74,6 +97,7 @@ A few patterns to follow:
   catches.
 - **New macro?** Add to `src/macros.js` and a default key binding in
   `public/index.html`'s `MACRO_MAP`.
+- **Never log typed text** or anything secret. Log lengths and outcomes.
 
 ## Reporting protocol weirdness
 
