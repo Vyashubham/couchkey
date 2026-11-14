@@ -1,17 +1,3 @@
-<<<<<<< Updated upstream
-'use strict';
-
-const test = require('node:test');
-const assert = require('node:assert');
-const { _onAcknowledge, _pending, BUTTONS } = require('../src/xbox/gamepad');
-
-function track(seq) {
-  return new Promise(resolve => {
-    _pending.set(seq, { resolve, timer: setTimeout(() => resolve('timeout'), 200) });
-  });
-}
-const ack = body => _onAcknowledge({ packet_decoded: { protected_payload: body } });
-=======
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
@@ -29,7 +15,6 @@ function track(seq: number): Promise<unknown> {
   });
 }
 const ack = (body: unknown): void => { _onAcknowledge({ packet_decoded: { protected_payload: body } }); };
->>>>>>> Stashed changes
 
 test('processed list confirms a press', async () => {
   const p = track(10);
@@ -53,14 +38,6 @@ test('low watermark confirms everything at or below it', async () => {
 });
 
 test('malformed acks are ignored', () => {
-<<<<<<< Updated upstream
-  assert.doesNotThrow(() => _onAcknowledge(undefined));
-  assert.doesNotThrow(() => _onAcknowledge({ packet_decoded: { protected_payload: Buffer.alloc(4) } }));
-});
-
-test('button bitmask matches the library for shared buttons', () => {
-  const lib = require('xbox-smartglass-core-node/src/channels/systeminput')()._button_map;
-=======
   assert.doesNotThrow(() => { _onAcknowledge(undefined); });
   assert.doesNotThrow(() => { _onAcknowledge({ packet_decoded: { protected_payload: Buffer.alloc(4) } }); });
 });
@@ -68,6 +45,5 @@ test('button bitmask matches the library for shared buttons', () => {
 test('button bitmask matches the library for shared buttons', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const lib = (require('xbox-smartglass-core-node/src/channels/systeminput') as () => { _button_map: Record<string, number> })()._button_map;
->>>>>>> Stashed changes
   for (const [name, mask] of Object.entries(lib)) assert.strictEqual(BUTTONS[name], mask, name);
 });
