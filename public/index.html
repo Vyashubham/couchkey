@@ -266,10 +266,14 @@ function connectWS(){
 }
 
 function updateState(s){
+  // Prefill the last console so nobody has to scan again.
+  const ipEl=document.getElementById('ipInput');
+  if(s.knownConsole&&!ipEl.value&&document.activeElement!==ipEl) ipEl.value=s.knownConsole.ip;
   const pill=document.getElementById('statusPill');
   const text=document.getElementById('statusText');
   pill.className=`status-pill s-${s.status}`;
-  text.textContent={disconnected:'Disconnected',discovering:'Scanning...',connecting:'Connecting...',connected:'Connected'}[s.status]||s.status;
+  const who=s.knownConsole&&s.knownConsole.name?s.knownConsole.name:'Xbox';
+  text.textContent={disconnected:'Disconnected',discovering:'Scanning...',connecting:`Connecting to ${who}...`,connected:`Connected to ${who}`}[s.status]||s.status;
 
   // Auto-enable capture when first connected
   if(s.status==='connected'&&s.inputReady&&!wasConnected){

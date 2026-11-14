@@ -40,6 +40,11 @@ const config = {
   heartbeatKeepAliveAfterSec: int('HEARTBEAT_KEEPALIVE_AFTER_SEC', 3),
   heartbeatKeepAliveIntervalSec: int('HEARTBEAT_KEEPALIVE_INTERVAL_SEC', 2),
 
+  // Persistent data (known consoles, settings)
+  dataDir: process.env.DATA_DIR ?? path.join(ROOT_DIR, 'data'),
+  // Reconnect to the last console automatically on startup (0 = off)
+  autoConnect: process.env.AUTO_CONNECT !== '0',
+
   // Logging
   logDir: process.env.LOG_DIR ?? path.join(ROOT_DIR, 'logs'),
   protocolLogRingBufferSize: 500,

@@ -18,6 +18,7 @@ if (config.smartglassDebug) {
 const { plog, paths: logPaths } = require('./src/logger') as typeof import('./src/logger');
 const { registerHttpRoutes } = require('./src/server/http') as typeof import('./src/server/http');
 const { attachWebSocket } = require('./src/server/ws') as typeof import('./src/server/ws');
+const { autoConnect } = require('./src/xbox/connection') as typeof import('./src/xbox/connection');
 /* eslint-enable @typescript-eslint/no-require-imports */
 import { loadLayouts } from './src/osk/registry';
 
@@ -38,4 +39,5 @@ couchkey listening on http://localhost:${config.port}
 Session log: ${logPaths.sessionLog}
 Latest log:  ${logPaths.latestLog}
 `);
+  if (config.autoConnect) autoConnect();
 });

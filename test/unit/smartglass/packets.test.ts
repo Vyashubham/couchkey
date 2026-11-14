@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
-  buildGamepadPacket, buildTextAckPacket, buildTextDonePacket, buildTextInputPacket, encodeSGString, padTo16,
+  buildAckPacket, buildGamepadPacket, buildTextAckPacket, buildTextDonePacket, buildTextInputPacket, encodeSGString, padTo16,
 } from '../../../src/console/smartglass/packets';
 import { FakeSgClient, SIG, unseal } from './fake-sg-client';
 
@@ -69,4 +69,11 @@ test('gamepad packet: acked by default, timestamp + buttons + zeroed axes', () =
 test('packets end with the HMAC signature', () => {
   const pkt = buildTextAckPacket({ ...env(), sessionId: 1, versionAck: 1 });
   assert.deepEqual(pkt.subarray(-32), SIG);
+});
+
+test('acknowledge packet: watermark, processed ids, empty rejected list, optional need_ack', () => {
+  const plain = unseal(buildAckPacket({ xbox: env().xbox, lowWatermark: 9, processed: [9] }));
+  assert.equal(plain.flags, '8001');
+  assert.deepEqual([0, 4, 8, 12].map(o => plain.payload.readUInt32BE(o)), [9, 1, 9, 0]);
+  assert.equal(unseal(buildAckPacket({ xbox: env().xbox, lowWatermark: 9, needAck: true })).flags, 'a001');
 });

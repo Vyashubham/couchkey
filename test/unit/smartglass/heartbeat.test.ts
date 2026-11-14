@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test, vi } from 'vitest';
-import { installHeartbeat } from '../../../src/console/smartglass/heartbeat';
-import { FakeSgClient } from './fake-sg-client';
+import { installHeartbeat, sequenceOf } from '../../../src/console/smartglass/heartbeat';
+import { FakeSgClient, unseal } from './fake-sg-client';
 
 beforeEach(() => { vi.useFakeTimers(); });
 afterEach(() => { vi.useRealTimers(); });
@@ -50,4 +50,29 @@ test('stops quietly when the client disconnects; keep-alive errors are reported'
   client._connection_status = false;
   vi.advanceTimersByTime(3000);
   assert.equal(errors.length, 1);
+});
+
+test('keep-alives request a reply and report the last sequence received from the Xbox', () => {
+  const client = new FakeSgClient();
+  client._connection_status = true;
+  client._console._request_num = 500; // our outgoing counter: must NOT be reported
+  client._last_received_time = 0;
+  installHeartbeat(client, { ...opts, nowSec: () => 4, onTimeout: () => assert.fail('no timeout') });
+  const header = (seq: number): Buffer => { const b = Buffer.alloc(26); b.writeUInt16BE(0xd00d, 0); b.writeUInt32BE(seq, 4); return b; };
+  client._events.emit('receive', header(23));
+  client._events.emit('receive', header(24));
+  client._events.emit('receive', header(7)); // older/out-of-order: ignored
+  client._events.emit('receive', Buffer.from('dd01', 'hex')); // discovery-style packet: ignored
+  vi.advanceTimersByTime(1000);
+  const ka = unseal(client.sent.at(-1) ?? Buffer.alloc(0));
+  assert.equal(ka.flags, 'a001', 'need_ack set');
+  assert.equal(ka.channel, '0000000000000000', 'core channel');
+  assert.equal(ka.payload.readUInt32BE(0), 24, 'low watermark = last received');
+  assert.deepEqual([ka.payload.readUInt32BE(4), ka.payload.readUInt32BE(8)], [0, 0], 'empty lists');
+});
+
+test('sequenceOf reads message headers only', () => {
+  assert.equal(sequenceOf('nope'), null);
+  assert.equal(sequenceOf(Buffer.from('d00d', 'hex')), null);
+  assert.equal(sequenceOf(Buffer.from('dd0100000000000000', 'hex')), null);
 });

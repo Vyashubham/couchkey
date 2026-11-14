@@ -21,6 +21,12 @@ const FLAG_SYSTEM_TEXT_DONE = Buffer.from('af35', 'hex'); // 0xF35
 // need_ack bit set the Xbox confirms every press it processed.
 const FLAG_GAMEPAD_ACKED = Buffer.from('af0a', 'hex');
 const FLAG_GAMEPAD = Buffer.from('8f0a', 'hex');
+// Acknowledge (0x001). The library only ever sends 0x8001 (no reply
+// requested); a keep-alive must request one or the Xbox has no reason
+// to answer.
+const FLAG_ACK = Buffer.from('8001', 'hex');
+const FLAG_ACK_NEEDS_ACK = Buffer.from('a001', 'hex');
+const CORE_CHANNEL = Buffer.alloc(8);
 
 const PACKET_TYPE_MESSAGE = Buffer.from('d00d', 'hex');
 const BLOCK_SIZE = 16;
@@ -111,6 +117,27 @@ export function buildTextDonePacket(
   payload.writeUInt32(0);
   payload.writeUInt32(env.result);
   return seal(env, FLAG_SYSTEM_TEXT_DONE, payload.toBuffer());
+}
+
+/**
+ * Acknowledge (0x001): low_watermark u32, processed_list (u32 count + u32
+ * ids), rejected_list (u32 count + u32 ids), on the core channel.
+ * `lowWatermark` is the highest sequence number we've received from the
+ * Xbox, not our own outgoing counter.
+ */
+export function buildAckPacket(env: {
+  xbox: SgConsole;
+  lowWatermark: number;
+  processed?: number[];
+  needAck?: boolean;
+}): Buffer {
+  const payload = PacketStructure();
+  payload.writeUInt32(env.lowWatermark);
+  const processed = env.processed ?? [];
+  payload.writeUInt32(processed.length);
+  for (const id of processed) payload.writeUInt32(id);
+  payload.writeUInt32(0);
+  return seal({ xbox: env.xbox, channelId: CORE_CHANNEL }, env.needAck ? FLAG_ACK_NEEDS_ACK : FLAG_ACK, payload.toBuffer());
 }
 
 /**
