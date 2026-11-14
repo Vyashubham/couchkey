@@ -25,12 +25,13 @@
   "author": "Shubham Vyas",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node --env-file-if-exists=.env server.js",
+    "test": "node --test test/",
     "lint": "eslint .",
-    "test": "node --test test/"
+    "check": "npm run lint && npm test"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.9.0"
   },
   "dependencies": {
     "express": "^4.18.2",
