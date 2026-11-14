@@ -1,13 +1,15 @@
-# xbox-keyboard
+# Couchkey
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org/)
-[![CI](https://github.com/Vyashubham/xbox-keyboard/actions/workflows/ci.yml/badge.svg)](https://github.com/Vyashubham/xbox-keyboard/actions/workflows/ci.yml)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D22.9-brightgreen)](https://nodejs.org/)
+[![CI](https://github.com/Vyashubham/couchkey/actions/workflows/ci.yml/badge.svg)](https://github.com/Vyashubham/couchkey/actions/workflows/ci.yml)
 
 > Control your Xbox Series X|S or Xbox One from your laptop keyboard over your local network.
 > No mobile app. No controller. No Microsoft account login. Just `npm start` and open a browser tab.
+>
+> *Couchkey is an independent project, not affiliated with or endorsed by Microsoft. Xbox is a trademark of Microsoft.*
 
-`xbox-keyboard` is a small Node.js server that speaks the Xbox SmartGlass
+Couchkey is a small Node.js server that speaks the Xbox SmartGlass
 protocol over UDP, serves a tiny web GUI, and bridges keystrokes from your
 browser into gamepad input on your Xbox. Free and open-source — the goal
 is that anyone with a console and a laptop on the same Wi-Fi can use it.
@@ -30,22 +32,27 @@ random disconnects. This is the small, local-only alternative.
 - **Xbox / View / Menu** mapped to `Escape` / `Tab` / `M`
 - **Macros** with `Ctrl+G/H/F/S/R/P/Q` for Guide, Home, Search, Screenshot, Record clip, Parties, Quick settings
 - **Text input** — type into the GUI, the Xbox text field updates as you go
-- **Media controls** — Play / Pause / Next / Previous from the GUI
+  (works where the Xbox shows its *system* keyboard: Edge, Store, system
+  search, sign-in)
+- **App keyboard typing** *(experimental)* — types into apps with their own
+  on-screen keyboard (YouTube, Netflix) by pressing through it for you,
+  about 1–2 letters per second
+- **Play/pause** with `Space`
 - **Real-time protocol log** in the GUI for diagnostics
 - **Auto-reconnect** on connection drop
 - Works headless — single Node process, no external services
 
 ## Requirements
 
-- **Node.js 18 or newer**
+- **Node.js 22.9 or newer**
 - **Xbox Series X|S or Xbox One** on the same local network as your computer
 - Xbox setting: **Settings → Devices & connections → Remote features → Xbox app preferences → Allow connections from any device**
 
 ## Quick start
 
 ```bash
-git clone https://github.com/Vyashubham/xbox-keyboard.git
-cd xbox-keyboard
+git clone https://github.com/Vyashubham/couchkey.git
+cd couchkey
 npm install
 npm start
 ```
@@ -81,14 +88,24 @@ When the keyboard is captured (banner is green):
 For text fields on the Xbox, click into the text box in the GUI and type
 normally. Enter submits, Esc cancels.
 
+For apps with their own keyboard (YouTube, Netflix), open the app's search
+keyboard on the Xbox, then use **App keyboard** in the GUI: pick the app,
+type, press Enter, and watch it type on the TV. Layouts live in `layouts/`
+and haven't been verified on every console yet. Why apps differ is
+explained in [docs/research/text-input.md](docs/research/text-input.md).
+
 ## Configuration
 
-All knobs are environment variables. Set them before `npm start`:
+All knobs are environment variables. Copy `.env.example` to `.env` and edit
+it (`npm start` loads it), or set them inline before `npm start`:
 
 | Variable                              | Default | What it does                                         |
 | ------------------------------------- | ------: | ---------------------------------------------------- |
 | `PORT`                                |  `3247` | HTTP/WebSocket port                                  |
 | `BUTTON_MIN_INTERVAL_MS`              |   `150` | Min ms between gamepad sends (rate limit)            |
+| `GAMEPAD_ACK`                         |     `0` | `1` = Xbox confirms every press (experimental)       |
+| `GAMEPAD_HOLD_MS`                     |    `60` | Button hold time when `GAMEPAD_ACK=1`                |
+| `GAMEPAD_ACK_TIMEOUT_MS`              |  `1000` | How long to wait for a press confirmation            |
 | `RECONNECT_DELAY_MS`                  |  `5000` | Wait before auto-reconnect after disconnect          |
 | `HEARTBEAT_TIMEOUT_SEC`               |    `30` | Seconds of silence before declaring the link dead    |
 | `HEARTBEAT_KEEPALIVE_AFTER_SEC`       |     `3` | Start sending keep-alives after this much silence    |
@@ -125,25 +142,24 @@ For a deeper writeup of the protocol details, see [docs/PROTOCOL.md](docs/PROTOC
 
 ```
 server.js                    Entry point: builds HTTP + WS, wires modules, listens
-public/index.html            The GUI (single file, no build step)
+public/index.html            The GUI (single file, no build step — being replaced, see roadmap)
+layouts/                     App on-screen keyboard layouts (JSON)
 src/
   config.js                  All tunables (env-driven)
   state.js                   Shared mutable connection / text-channel state
   bus.js                     EventEmitter that decouples domain modules from transports
   logger.js                  Protocol logger: ring buffer + per-session files + bus events
   macros.js                  Multi-step button sequences
-  protocol/
-    packets.js               Raw SmartGlass text-channel packet builders
-    channels.js              Channel-open dance (Series X workaround)
-    helpers.js               parseConnectionError, summarizeEventData
-  xbox/
-    connection.js            discoverConsoles / connectToConsole / scheduleReconnect / disconnect
-    heartbeat.js             Custom keep-alive interval (replaces library default)
-    input.js                 sendButton / runMacro / sendMediaCommand
-    text.js                  sendText / submitText / cancelText
-  server/
-    http.js                  Express routes (/api/status, /api/discover, etc.)
-    ws.js                    WebSocket: bus -> broadcast, inbound message dispatch
+  osk/                       App-keyboard typing: layout model, path planner, typer
+  protocol/                  Raw SmartGlass packet builders, channel-open workaround
+  xbox/                      Connection, heartbeat, gamepad/media input, text channel
+  server/                    Express routes and WebSocket dispatch
+test/                        Unit tests (node:test)
+docs/
+  ARCHITECTURE.md            How it fits together, audit, target design
+  ROADMAP.md                 Plan and ticket backlog
+  PROTOCOL.md                SmartGlass protocol notes
+  research/                  Investigations (e.g. why text input is limited)
 ```
 
 ## Troubleshooting
@@ -173,10 +189,18 @@ The Xbox needs a text field to be in focus on screen for the text
 channel to be active. Open a text box on the console (search bar,
 search field in an app) before typing in the GUI.
 
+## Security
+
+Read [SECURITY.md](SECURITY.md) before running this on a shared network:
+the server currently accepts connections from your whole network, and logs
+include text you type.
+
 ## Contributing
 
 Issues and pull requests welcome. See [CONTRIBUTING.md](CONTRIBUTING.md)
-for the development workflow and a tour of the codebase.
+for the workflow, [docs/ROADMAP.md](docs/ROADMAP.md) for what's planned,
+and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Adding a keyboard layout for
+an app you use is a great first contribution.
 
 ## Credits
 

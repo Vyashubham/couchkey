@@ -28,7 +28,7 @@
   .layout{display:flex;height:calc(100vh - 49px)}
 
   /* Left: controls */
-  .panel-left{width:280px;border-right:1px solid var(--border);padding:16px;display:flex;flex-direction:column;gap:12px;background:var(--surface);overflow-y:auto}
+  .panel-left{width:280px;flex-shrink:0;border-right:1px solid var(--border);padding:16px;display:flex;flex-direction:column;gap:12px;background:var(--surface);overflow-y:auto}
   .section-title{font:700 10px 'JetBrains Mono',monospace;color:var(--text2);text-transform:uppercase;letter-spacing:1.2px}
   .ip-row{display:flex;gap:6px}
   .ip-input{flex:1;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font:13px 'JetBrains Mono',monospace;outline:none}
@@ -72,7 +72,7 @@
   .mbtn:hover{border-color:var(--purple);color:var(--text)}
 
   /* Right: LOGS — the star of this version */
-  .panel-right{flex:1;display:flex;flex-direction:column;background:var(--bg)}
+  .panel-right{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--bg)}
   .log-header{padding:8px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;background:var(--surface)}
   .log-header .section-title{margin:0}
   .log-filter{padding:3px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font:11px 'JetBrains Mono',monospace;outline:none}
@@ -86,7 +86,7 @@
   .l-err .lvl{background:var(--red-dim);color:var(--red)}
   .l-proto .lvl{background:#2d1b69;color:var(--purple)}
   .log-entry .msg{color:var(--text)}
-  .log-entry .data{display:block;color:var(--text2);white-space:pre-wrap;font-size:11px;margin:2px 0 4px 24px;padding:4px 8px;background:var(--surface);border-radius:4px;max-height:200px;overflow:auto}
+  .log-entry .data{display:block;color:var(--text2);white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px;margin:2px 0 4px 24px;padding:4px 8px;background:var(--surface);border-radius:4px;max-height:200px;overflow:auto}
   .log-count{font:11px 'JetBrains Mono',monospace;color:var(--text2);margin-left:auto}
   .clear-btn{font:10px 'JetBrains Mono',monospace;padding:2px 8px;border-radius:3px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);cursor:pointer}
 </style>
@@ -167,6 +167,36 @@
         <button class="btn btn-red" style="flex:1" onclick="doCancelText()">Cancel (Esc)</button>
       </div>
     </div>
+    <!-- App keyboard (on-screen keyboard driving) -->
+    <div>
+      <div class="section-title">App keyboard (YouTube, Netflix…)</div>
+      <div style="font:12px 'JetBrains Mono',monospace;color:var(--text2);padding:4px 0">
+        Open the app's search keyboard on the Xbox, pick the app, type, press Enter. Watch the TV.
+      </div>
+      <div style="display:flex;gap:6px;margin-top:4px">
+        <select id="oskLayout" class="ip-input" style="flex:0 0 40%"></select>
+        <input type="text" id="oskInput" class="ip-input" placeholder="lofi beats" style="flex:1"
+          onkeydown="onOskKeydown(event)">
+      </div>
+      <label style="display:flex;gap:6px;align-items:center;margin-top:6px;font-size:12px;color:var(--text2)">
+        <input type="checkbox" id="oskFresh" checked> Keyboard just opened (highlight is on its first key)
+      </label>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button class="btn btn-green" style="flex:1" onclick="doOskType()">Type (Enter)</button>
+        <button class="btn btn-red" style="flex:1" onclick="doOskCancel()">Stop</button>
+      </div>
+      <div id="oskStatus" style="font:12px 'JetBrains Mono',monospace;color:var(--text2);padding:4px 0"></div>
+
+      <div class="section-title" style="margin-top:10px">Press settings (testing)</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:4px;font-size:12px;color:var(--text2);flex-wrap:wrap">
+        <label style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="ackToggle" onchange="pushInputOptions()"> Confirm each press</label>
+        <label style="display:flex;gap:4px;align-items:center">Gap
+          <input type="number" id="intervalInput" class="ip-input" style="width:70px;padding:4px 6px" min="30" max="2000" step="10"
+            onchange="pushInputOptions()" onkeydown="event.stopPropagation()"> ms</label>
+        <button class="btn btn-gray" onclick="doBench()">Speed test</button>
+      </div>
+      <div id="benchResult" style="font:12px 'JetBrains Mono',monospace;color:var(--text2);padding:4px 0"></div>
+    </div>
   </div>
 
   <!-- RIGHT: Protocol Logs -->
@@ -217,9 +247,20 @@ function connectWS(){
         ts.style.color='var(--text2)';
       }
     }
+    else if(msg.type==='osk_layouts') fillLayouts(msg.layouts||[]);
+    else if(msg.type==='osk_type_ack') onOskDone(msg);
+    else if(msg.type==='input_options_ack'){
+      document.getElementById('ackToggle').checked=!!msg.ack;
+      document.getElementById('intervalInput').value=msg.intervalMs;
+    }
+    else if(msg.type==='press_bench_ack') showBench(msg);
     else if(msg.type==='text_ack'){
       if(!msg.ok) addLog({level:'err',msg:`Text failed: ${msg.error}`});
     }
+  };
+  ws.onopen=()=>{
+    ws.send(JSON.stringify({type:'osk_list'}));
+    ws.send(JSON.stringify({type:'input_options'}));
   };
   ws.onclose=()=>setTimeout(connectWS,2000);
 }
@@ -376,6 +417,62 @@ function flashButton(btn){
 document.querySelectorAll('[data-btn]').forEach(el=>{
   el.addEventListener('click',()=>sendBtn(el.dataset.btn));
 });
+
+// App keyboard (on-screen keyboard driving)
+let oskStarted=0;
+function fillLayouts(list){
+  const sel=document.getElementById('oskLayout');
+  const prev=sel.value;
+  sel.innerHTML=list.filter(l=>l.id!=='xbox-system').concat(list.filter(l=>l.id==='xbox-system'))
+    .map(l=>`<option value="${escHtml(l.id)}">${escHtml(l.name)}${l.verified?'':' (untested)'}</option>`).join('');
+  if(prev) sel.value=prev;
+}
+function onOskKeydown(e){
+  e.stopPropagation(); // don't let capture mode grab these keys
+  if(e.key==='Enter'){e.preventDefault();doOskType()}
+  if(e.key==='Escape'){e.preventDefault();doOskCancel()}
+}
+function doOskType(){
+  const text=document.getElementById('oskInput').value;
+  if(!text||!ws||ws.readyState!==1) return;
+  const fresh=document.getElementById('oskFresh').checked;
+  ws.send(JSON.stringify({type:'osk_type',layout:document.getElementById('oskLayout').value,text,fresh}));
+  oskStarted=Date.now();
+  setOskStatus(`Typing "${text}"… watch the TV`, 'var(--text2)');
+}
+function doOskCancel(){ if(ws&&ws.readyState===1) ws.send(JSON.stringify({type:'osk_cancel'})); }
+function onOskDone(msg){
+  const secs=((Date.now()-oskStarted)/1000).toFixed(1);
+  if(msg.ok){
+    // We now know where the highlight is, so the next run continues from there.
+    document.getElementById('oskFresh').checked=false;
+    document.getElementById('oskInput').value='';
+    const skip=msg.skipped&&msg.skipped.length?` · skipped ${JSON.stringify(msg.skipped.join(''))}`:'';
+    setOskStatus(`Done: ${msg.pressed} presses in ${secs}s${skip}`, 'var(--green)');
+  } else {
+    // Position is unknown after a failure; next run should start fresh.
+    document.getElementById('oskFresh').checked=true;
+    setOskStatus(`Stopped after ${msg.pressed||0} presses: ${msg.error}. Reopen the keyboard before retrying.`, 'var(--red, #ef4444)');
+  }
+}
+function setOskStatus(t,c){const el=document.getElementById('oskStatus');el.textContent=t;el.style.color=c}
+
+function pushInputOptions(){
+  if(!ws||ws.readyState!==1) return;
+  ws.send(JSON.stringify({type:'input_options',
+    ack:document.getElementById('ackToggle').checked,
+    intervalMs:parseInt(document.getElementById('intervalInput').value,10)}));
+}
+function doBench(){
+  if(!ws||ws.readyState!==1) return;
+  document.getElementById('benchResult').textContent='Running 20 presses (right/left)…';
+  ws.send(JSON.stringify({type:'press_bench',count:20}));
+}
+function showBench(r){
+  const el=document.getElementById('benchResult');
+  if(r.ack) el.textContent=`${r.confirmed}/${r.count} confirmed · ${r.perSecond}/s · rtt avg ${r.avgRttMs??'–'}ms max ${r.maxRttMs??'–'}ms${r.firstError?' · '+r.firstError:''}`;
+  else el.textContent=`${r.sent}/${r.count} sent (unconfirmed) · ${r.perSecond}/s${r.firstError?' · '+r.firstError:''}`;
+}
 
 connectWS();
 </script>

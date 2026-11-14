@@ -8,12 +8,12 @@ on:
 
 jobs:
   lint:
-    name: Lint
+    name: Lint & test
     runs-on: ubuntu-latest
 
     strategy:
       matrix:
-        node-version: ['18.x', '20.x', '22.x']
+        node-version: ['22.x', '24.x', '26.x']
 
     steps:
       - uses: actions/checkout@v4
@@ -29,6 +29,9 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      - name: Test
+        run: npm test
 
       - name: Verify entry point parses
         run: node -c server.js

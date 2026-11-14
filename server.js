@@ -18,18 +18,20 @@ if (config.smartglassDebug) {
 const { paths: logPaths } = require('./src/logger');
 const { registerHttpRoutes } = require('./src/server/http');
 const { attachWebSocket } = require('./src/server/ws');
+const { loadLayouts } = require('./src/osk/registry');
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
+loadLayouts();
 registerHttpRoutes(app);
 attachWebSocket(wss);
 
 server.listen(config.port, () => {
   // eslint-disable-next-line no-console
   console.log(`
-xbox-keyboard listening on http://localhost:${config.port}
+couchkey listening on http://localhost:${config.port}
 
 Session log: ${logPaths.sessionLog}
 Latest log:  ${logPaths.latestLog}

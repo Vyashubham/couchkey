@@ -22,7 +22,7 @@ Guide; nothing happened on the Xbox and the GUI showed no error." -->
 - Console firmware: <!-- Settings → System → Console info → OS version -->
 - OS on the laptop:
 - Node version: <!-- output of `node -v` -->
-- xbox-keyboard version / commit: <!-- e.g. v0.1.0, or commit hash -->
+- Couchkey version / commit: <!-- e.g. v0.1.0, or commit hash -->
 - Browser used for the GUI:
 
 **Logs**

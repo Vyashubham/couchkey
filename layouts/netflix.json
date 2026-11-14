@@ -1,0 +1,21 @@
+{
+  "id": "netflix",
+  "name": "Netflix",
+  "verified": false,
+  "notes": "From a photo of the Xbox Netflix app search screen (Nov 2026). Highlight starts on a. Y = space and X = backspace are shown on screen as gamepad shortcuts. Right of column 5 is the results grid and below the last row is the category list, so there is no safe corner to re-anchor on. No punctuation keys: '-' and apostrophes are skipped, which Netflix search tolerates.",
+  "start": "a",
+  "wrap": { "h": false, "v": false },
+  "verticalColumn": "memory",
+  "caseInsensitive": true,
+  "rows": [
+    [{ "key": "space", "span": 3 }, { "key": "backspace", "span": 3 }],
+    ["a", "b", "c", "d", "e", "f"],
+    ["g", "h", "i", "j", "k", "l"],
+    ["m", "n", "o", "p", "q", "r"],
+    ["s", "t", "u", "v", "w", "x"],
+    ["y", "z", "1", "2", "3", "4"],
+    ["5", "6", "7", "8", "9", "0"]
+  ],
+  "chars": { " ": "space" },
+  "shortcuts": { "y": "space", "x": "backspace" }
+}
