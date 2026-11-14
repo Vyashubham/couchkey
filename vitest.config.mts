@@ -14,6 +14,7 @@ export default defineConfig({
       // (ROADMAP M2). Pure core modules must stay well covered now.
       thresholds: {
         'src/osk/**': { statements: 90, branches: 85, functions: 90, lines: 90 },
+        'src/console/**/*.ts': { statements: 90, branches: 75, functions: 90, lines: 90 },
       },
     },
   },

@@ -21,6 +21,11 @@ All notable changes are recorded here. Format:
 - Research notes moved to `docs/research/text-input.md`.
 
 ### Fixed
+- Text with accents or emoji: SmartGlass string length is now the UTF-8
+  byte count (the library wrote the character count). Needs on-console
+  confirmation.
+- Connection errors are matched case-insensitively and "Device limit
+  exceeded" gets its own explanation.
 - SystemText wire format now matches the OpenXbox reference, so typing
   reaches Edge, Store, and system search fields.
 - GUI control panel no longer gets squeezed by long log lines.

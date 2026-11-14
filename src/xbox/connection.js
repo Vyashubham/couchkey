@@ -15,9 +15,12 @@ const bus = require('../bus');
 const config = require('../config');
 const { plog } = require('../logger');
 const state = require('../state');
-const { forceOpenChannels } = require('../protocol/channels');
-const { parseConnectionError, summarizeEventData } = require('../protocol/helpers');
-const { installHeartbeat } = require('./heartbeat');
+const { forceOpenChannels } = require('./channels');
+const { toConnectError } = require('../console/errors');
+const { summarizeEvent } = require('../console/smartglass/summarize');
+const { installHeartbeat } = require('../console/smartglass/heartbeat');
+
+const parseConnectionError = err => toConnectError(err).message;
 const { setupTextEventListeners } = require('./text');
 
 function notifyState() {
@@ -56,7 +59,7 @@ function instrumentEventEmitter(sgClient) {
   const originalEmit = sgClient._events.emit.bind(sgClient._events);
   sgClient._events.emit = function instrumentedEmit(eventName, ...args) {
     if (eventName !== 'newListener' && eventName !== 'receive') {
-      plog('proto', `Event: ${eventName}`, summarizeEventData(eventName, args));
+      plog('proto', `Event: ${eventName}`, summarizeEvent(eventName, args));
     }
     return originalEmit(eventName, ...args);
   };
@@ -154,7 +157,12 @@ async function connectToConsole(ip) {
   // Replace the library's aggressive 8-second-with-one-keepalive
   // heartbeat with our configurable, repeatedly-pinging variant.
   installHeartbeat(sgClient, {
-    onTimeout: () => {
+    timeoutSec: config.heartbeatTimeoutSec,
+    keepAliveAfterSec: config.heartbeatKeepAliveAfterSec,
+    keepAliveIntervalSec: config.heartbeatKeepAliveIntervalSec,
+    onKeepAliveError: e => plog('warn', `Keep-alive send failed: ${e && e.message}`),
+    onTimeout: silent => {
+      plog('err', `Heartbeat timeout: ${silent}s since last received packet`);
       if (myGeneration !== state.connectionGeneration) return;
       state.connectionStatus = 'disconnected';
       state.inputReady = false;
