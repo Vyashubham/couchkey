@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Xbox Remote — Diagnostic</title>
+<title>Couchkey</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@400;500;700&display=swap');
   :root {
@@ -28,7 +28,7 @@
   .layout{display:flex;height:calc(100vh - 49px)}
 
   /* Left: controls */
-  .panel-left{width:280px;flex-shrink:0;border-right:1px solid var(--border);padding:16px;display:flex;flex-direction:column;gap:12px;background:var(--surface);overflow-y:auto}
+  .panel-left{width:340px;flex-shrink:0;border-right:1px solid var(--border);padding:16px;display:flex;flex-direction:column;gap:12px;background:var(--surface);overflow-y:auto}
   .section-title{font:700 10px 'JetBrains Mono',monospace;color:var(--text2);text-transform:uppercase;letter-spacing:1.2px}
   .ip-row{display:flex;gap:6px}
   .ip-input{flex:1;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font:13px 'JetBrains Mono',monospace;outline:none}
@@ -53,7 +53,7 @@
   .controller{display:flex;flex-direction:column;align-items:center;gap:12px;padding:12px 0}
   .capture-bar{padding:8px;text-align:center;font:500 12px 'DM Sans',sans-serif;border-radius:6px;width:100%}
   .capture-bar.on{background:var(--green-dim);color:var(--green)} .capture-bar.off{background:var(--surface2);color:var(--text2)}
-  .dpad-face{display:flex;align-items:center;gap:32px}
+  .dpad-face{display:flex;align-items:center;justify-content:center;gap:24px;flex-wrap:wrap}
   .grid3{display:grid;grid-template-columns:44px 44px 44px;grid-template-rows:44px 44px 44px;gap:3px}
   .dbtn{width:44px;height:44px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .1s;user-select:none}
   .dbtn:active,.dbtn.pressed{background:var(--xbox);border-color:var(--xbox);color:#fff;transform:scale(.93)}
@@ -94,7 +94,7 @@
 <body>
 
 <div class="header">
-  <h1>🎮 Xbox Remote <span class="badge">DIAGNOSTIC</span></h1>
+  <h1>🎮 Couchkey <span class="badge">PREVIEW</span></h1>
   <div id="statusPill" class="status-pill s-disconnected"><span class="dot"></span><span id="statusText">Disconnected</span></div>
 </div>
 
@@ -173,9 +173,9 @@
       <div style="font:12px 'JetBrains Mono',monospace;color:var(--text2);padding:4px 0">
         Open the app's search keyboard on the Xbox, pick the app, type, press Enter. Watch the TV.
       </div>
-      <div style="display:flex;gap:6px;margin-top:4px">
-        <select id="oskLayout" class="ip-input" style="flex:0 0 40%"></select>
-        <input type="text" id="oskInput" class="ip-input" placeholder="lofi beats" style="flex:1"
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px">
+        <select id="oskLayout" class="ip-input" aria-label="App"></select>
+        <input type="text" id="oskInput" class="ip-input" placeholder="lofi beats" aria-label="Text to type"
           onkeydown="onOskKeydown(event)">
       </div>
       <label style="display:flex;gap:6px;align-items:center;margin-top:6px;font-size:12px;color:var(--text2)">
@@ -423,7 +423,9 @@ let oskStarted=0;
 function fillLayouts(list){
   const sel=document.getElementById('oskLayout');
   const prev=sel.value;
-  sel.innerHTML=list.filter(l=>l.id!=='xbox-system').concat(list.filter(l=>l.id==='xbox-system'))
+  const order=['youtube','netflix'];
+  const rank=l=>{const i=order.indexOf(l.id);return i===-1?(l.id==='xbox-system'?99:50):i};
+  sel.innerHTML=[...list].sort((a,b)=>rank(a)-rank(b))
     .map(l=>`<option value="${escHtml(l.id)}">${escHtml(l.name)}${l.verified?'':' (untested)'}</option>`).join('');
   if(prev) sel.value=prev;
 }
