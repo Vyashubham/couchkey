@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { TypedEmitter } from '../../../src/console/emitter';
-import { ConsoleError, isButton, isMediaCommand, toConnectError } from '../../../src/console';
+import { BUTTON_MASKS, ConsoleError, isButton, isMediaCommand, toConnectError } from '../../../src/console';
 
 test('toConnectError maps known SmartGlass failures to codes with help text', () => {
   // Real strings from the library's connect_result table.
@@ -37,4 +37,16 @@ test('emitter isolates listener errors and supports unsubscribe', () => {
   assert.deepEqual(seen, [1]);
   assert.equal(errors.length, 2);
   assert.equal(em.listenerCount('ping'), 1);
+});
+
+test('button masks are Windows.Gaming.Input GamepadButtons shifted left by 2', () => {
+  // Windows.Gaming.Input.GamepadButtons values.
+  const wgi = {
+    menu: 1, view: 2, a: 4, b: 8, x: 16, y: 32, up: 64, down: 128, left: 256, right: 512,
+    left_shoulder: 1024, right_shoulder: 2048, left_thumbstick: 4096, right_thumbstick: 8192,
+  } as const;
+  for (const [name, value] of Object.entries(wgi)) {
+    assert.equal(BUTTON_MASKS[name as keyof typeof wgi], value << 2, name);
+  }
+  assert.equal(BUTTON_MASKS.nexus, 2);
 });

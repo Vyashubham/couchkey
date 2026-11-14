@@ -20,7 +20,14 @@ const { toConnectError } = require('../console/errors');
 const { summarizeEvent } = require('../console/smartglass/summarize');
 const { installHeartbeat } = require('../console/smartglass/heartbeat');
 
+const { KnownConsoles } = require('../known-consoles');
+
 const parseConnectionError = err => toConnectError(err).message;
+
+// Consoles we've connected to before (for automatic reconnect on startup)
+// and the names we saw during the most recent discovery.
+const knownConsoles = new KnownConsoles(config.dataDir);
+const discoveredNames = new Map();
 const { setupTextEventListeners } = require('./text');
 
 function notifyState() {
@@ -37,6 +44,7 @@ async function discoverConsoles(ip) {
   try {
     const consoles = await client.discovery(ip || undefined);
     plog('ok', `Discovery complete. Found ${consoles.length} console(s).`);
+    consoles.forEach(c => { if (c.message.name) discoveredNames.set(c.remote.address, c.message.name); });
     consoles.forEach((c, i) => {
       plog('proto', `Console #${i}:`, {
         address: c.remote.address,
@@ -122,6 +130,14 @@ async function connectToConsole(ip) {
   state.connectionStatus = 'connecting';
   state.lastError = null;
   state.inputReady = false;
+  // A new session starts with no text field open; the Xbox tells us
+  // again (SystemTextConfiguration) if one is focused.
+  state.textChannelOpen = false;
+  state.textChannelId = null;
+  state.textSessionActive = false;
+  state.textVersion = 0;
+  state.currentText = '';
+  bus.emit('text_session', { active: false });
   notifyState();
 
   plog('info', `[gen:${myGeneration}] Creating SmartGlass client and connecting to ${ip}...`);
@@ -152,6 +168,11 @@ async function connectToConsole(ip) {
   state.connectionStatus = 'connected';
   state.connectedConsole = { ip };
   state.lastError = null;
+  try {
+    state.knownConsole = knownConsoles.remember(ip, discoveredNames.get(ip));
+  } catch (e) {
+    plog('warn', `Could not save known console: ${e.message}`);
+  }
   plog('ok', `SmartGlass connect() resolved. Connection status: ${sgClient.isConnected()}`);
 
   // Replace the library's aggressive 8-second-with-one-keepalive
@@ -209,6 +230,23 @@ async function connectToConsole(ip) {
   notifyState();
 }
 
+// Reconnect to the most recently used console on startup. If it's off,
+// keep retrying in the background until it appears or the user
+// disconnects.
+function autoConnect() {
+  const last = knownConsoles.last();
+  if (!last) {
+    plog('info', 'No known console yet. Scan to find your Xbox.');
+    return;
+  }
+  state.knownConsole = last;
+  plog('info', `Reconnecting to ${last.name || 'Xbox'} at ${last.ip}...`);
+  connectToConsole(last.ip).catch(() => {
+    plog('info', `${last.name || 'Xbox'} isn't reachable yet; will keep trying every ${config.reconnectDelayMs / 1000}s`);
+    scheduleReconnect(last.ip);
+  });
+}
+
 function scheduleReconnect(ip) {
   if (state.reconnectTimer) clearTimeout(state.reconnectTimer);
   state.reconnectTimer = setTimeout(() => {
@@ -239,6 +277,7 @@ function disconnect() {
 }
 
 module.exports = {
+  autoConnect,
   discoverConsoles,
   connectToConsole,
   scheduleReconnect,

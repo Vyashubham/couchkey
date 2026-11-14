@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
-  buildGamepadPacket, buildTextAckPacket, buildTextDonePacket, buildTextInputPacket, encodeSGString, padTo16,
+  buildAckPacket, buildGamepadPacket, gamepadTimestamp, buildTextAckPacket, buildTextDonePacket, buildTextInputPacket, encodeSGString, padTo16,
 } from '../../../src/console/smartglass/packets';
 import { FakeSgClient, SIG, unseal } from './fake-sg-client';
 
@@ -58,7 +58,7 @@ test('text ack and done layouts (done flags are u32)', () => {
 test('gamepad packet: acked by default, timestamp + buttons + zeroed axes', () => {
   const acked = unseal(buildGamepadPacket({ ...env(), buttons: 16, now: 1_700_000_000_000 }));
   assert.equal(acked.flags, 'af0a');
-  assert.equal(acked.payload.readBigUInt64BE(0), 1_700_000_000_000n);
+  assert.equal(acked.payload.subarray(0, 8).toString('hex'), '0001700000000000', 'library timestamp encoding');
   assert.equal(acked.payload.readUInt16BE(8), 16);
   assert.ok(acked.payload.subarray(10, 34).every(x => x === 0));
   assert.equal(acked.len, 34);
@@ -69,4 +69,28 @@ test('gamepad packet: acked by default, timestamp + buttons + zeroed axes', () =
 test('packets end with the HMAC signature', () => {
   const pkt = buildTextAckPacket({ ...env(), sessionId: 1, versionAck: 1 });
   assert.deepEqual(pkt.subarray(-32), SIG);
+});
+
+test('acknowledge packet: watermark, processed ids, empty rejected list, optional need_ack', () => {
+  const plain = unseal(buildAckPacket({ xbox: env().xbox, lowWatermark: 9, processed: [9] }));
+  assert.equal(plain.flags, '8001');
+  assert.deepEqual([0, 4, 8, 12].map(o => plain.payload.readUInt32BE(o)), [9, 1, 9, 0]);
+  assert.equal(unseal(buildAckPacket({ xbox: env().xbox, lowWatermark: 9, needAck: true })).flags, 'a001');
+});
+
+test('gamepad analog values are big-endian float32, clamped', () => {
+  const p = unseal(buildGamepadPacket({
+    ...env(), buttons: 0, needAck: false,
+    analog: { leftX: 0.5, leftY: -2, rightY: 0.25, rightTrigger: 7, leftTrigger: Number.NaN },
+  }));
+  const f = (i: number): number => p.payload.readFloatBE(10 + i * 4);
+  assert.deepEqual([f(0), f(1), f(2), f(3), f(4), f(5)], [0, 1, 0.5, -1, 0, 0.25]);
+});
+
+test('gamepad timestamps match the library encoding and stay monotonic', () => {
+  assert.equal(gamepadTimestamp(1763108152312).toString('hex'), '0001763108152312');
+  assert.equal(gamepadTimestamp(1763108152312).length, 8);
+  const a = gamepadTimestamp(1763108152312).readBigUInt64BE(0);
+  const b = gamepadTimestamp(1763108152313).readBigUInt64BE(0);
+  assert.ok(b > a);
 });

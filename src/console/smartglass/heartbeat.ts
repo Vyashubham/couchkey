@@ -6,8 +6,8 @@
 // received" timestamp falls behind even though the Xbox is fine. So we
 // send keep-alives repeatedly and tolerate a longer silence.
 
-import Packer from 'xbox-smartglass-core-node/src/packet/packer';
 import type { SgClient } from 'xbox-smartglass-core-node';
+import { buildAckPacket } from './packets';
 
 export interface HeartbeatOptions {
   timeoutSec: number;
@@ -20,12 +20,23 @@ export interface HeartbeatOptions {
 
 const defaultNowSec = (): number => Math.floor(Date.now() / 1000);
 
-function sendKeepAlive(client: SgClient): void {
+/** Sequence number from a raw SmartGlass message header (0xD00D), if any. */
+export function sequenceOf(raw: unknown): number | null {
+  if (!Buffer.isBuffer(raw) || raw.length < 8) return null;
+  if (raw.readUInt16BE(0) !== 0xd00d) return null;
+  return raw.readUInt32BE(4);
+}
+
+/**
+ * Keep-alive: an Acknowledge that requests a reply (need_ack), reporting
+ * the last sequence number we received. The library's version did
+ * neither, so once the Xbox stopped pinging us (it does after gamepad
+ * input) nothing made it answer and the session timed out.
+ */
+function sendKeepAlive(client: SgClient, lastReceivedSeq: number): void {
   const xbox = client._console;
   xbox.get_requestnum();
-  const ack = Packer('message.acknowledge');
-  ack.set('low_watermark', xbox._request_num);
-  client._send(ack.pack(xbox));
+  client._send(buildAckPacket({ xbox, lowWatermark: lastReceivedSeq, needAck: true }));
 }
 
 /** Install our heartbeat on a connected client. Returns a function that stops it. */
@@ -36,6 +47,13 @@ export function installHeartbeat(client: SgClient, opts: HeartbeatOptions): () =
     client._interval_timeout = false;
   }
 
+  let lastReceivedSeq = 0;
+  const onReceive = (raw: unknown): void => {
+    const seq = sequenceOf(raw);
+    if (seq !== null && seq > lastReceivedSeq) lastReceivedSeq = seq;
+  };
+  client._events.on('receive', onReceive);
+
   const handle = setInterval(() => {
     if (!client._connection_status) {
       clearInterval(handle);
@@ -45,7 +63,7 @@ export function installHeartbeat(client: SgClient, opts: HeartbeatOptions): () =
 
     if (silent >= opts.keepAliveAfterSec && silent % opts.keepAliveIntervalSec === 0) {
       try {
-        sendKeepAlive(client);
+        sendKeepAlive(client, lastReceivedSeq);
       } catch (err) {
         opts.onKeepAliveError?.(err);
       }
@@ -60,6 +78,7 @@ export function installHeartbeat(client: SgClient, opts: HeartbeatOptions): () =
 
   client._interval_timeout = handle;
   return () => {
+    client._events.off('receive', onReceive);
     clearInterval(handle);
     if (client._interval_timeout === handle) client._interval_timeout = false;
   };

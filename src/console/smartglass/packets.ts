@@ -21,6 +21,12 @@ const FLAG_SYSTEM_TEXT_DONE = Buffer.from('af35', 'hex'); // 0xF35
 // need_ack bit set the Xbox confirms every press it processed.
 const FLAG_GAMEPAD_ACKED = Buffer.from('af0a', 'hex');
 const FLAG_GAMEPAD = Buffer.from('8f0a', 'hex');
+// Acknowledge (0x001). The library only ever sends 0x8001 (no reply
+// requested); a keep-alive must request one or the Xbox has no reason
+// to answer.
+const FLAG_ACK = Buffer.from('8001', 'hex');
+const FLAG_ACK_NEEDS_ACK = Buffer.from('a001', 'hex');
+const CORE_CHANNEL = Buffer.alloc(8);
 
 const PACKET_TYPE_MESSAGE = Buffer.from('d00d', 'hex');
 const BLOCK_SIZE = 16;
@@ -114,17 +120,76 @@ export function buildTextDonePacket(
 }
 
 /**
- * Gamepad (0xF0A), same layout the library packs: timestamp u64 ms,
- * buttons u16 bitmask, then triggers and thumbsticks (6 x 4 bytes, zero).
+ * Acknowledge (0x001): low_watermark u32, processed_list (u32 count + u32
+ * ids), rejected_list (u32 count + u32 ids), on the core channel.
+ * `lowWatermark` is the highest sequence number we've received from the
+ * Xbox, not our own outgoing counter.
+ */
+export function buildAckPacket(env: {
+  xbox: SgConsole;
+  lowWatermark: number;
+  processed?: number[];
+  needAck?: boolean;
+}): Buffer {
+  const payload = PacketStructure();
+  payload.writeUInt32(env.lowWatermark);
+  const processed = env.processed ?? [];
+  payload.writeUInt32(processed.length);
+  for (const id of processed) payload.writeUInt32(id);
+  payload.writeUInt32(0);
+  return seal({ xbox: env.xbox, channelId: CORE_CHANNEL }, env.needAck ? FLAG_ACK_NEEDS_ACK : FLAG_ACK, payload.toBuffer());
+}
+
+/** Analog state: triggers 0..1, sticks -1..1 (y up is positive). */
+export interface AnalogState {
+  leftTrigger?: number;
+  rightTrigger?: number;
+  leftX?: number;
+  leftY?: number;
+  rightX?: number;
+  rightY?: number;
+}
+
+/**
+ * Gamepad timestamp, encoded exactly like xbox-smartglass-core-node:
+ * the decimal millisecond string, prefixed with "000", read as hex
+ * (e.g. 1763108152312 ms -> bytes 00 01 76 31 08 15 23 12). Odd, but it
+ * is what the Xbox has accepted from every library-sent press, and
+ * mixing encodings (a plain u64 is a much smaller number) made the
+ * console ignore our packets after any library-sent one. Seen live on
+ * a Series X, Nov 2026.
+ */
+export function gamepadTimestamp(ms: number): Buffer {
+  return Buffer.from(`000${Math.floor(ms).toString()}`, 'hex');
+}
+
+const clamp = (v: number | undefined, lo: number, hi: number): number =>
+  v === undefined || Number.isNaN(v) ? 0 : Math.min(hi, Math.max(lo, v));
+
+/**
+ * Gamepad (0xF0A), per OpenXbox GamepadMessage: timestamp u64 ms,
+ * buttons u16 bitmask, then six big-endian float32: left trigger, right
+ * trigger, left stick x, left stick y, right stick x, right stick y.
+ * (The library packs these as u32 zeros, which is the same bytes for 0.)
+ *
+ * Verified on a Series X (Nov 2026): the Xbox acknowledges analog
+ * messages as processed, but SmartGlass input only drives UI navigation,
+ * so the left stick does not move Edge's free cursor (tried -1..1 and
+ * +-32767 ranges, 5-30 updates/s). Buttons, d-pad and shoulders work.
  */
 export function buildGamepadPacket(
-  env: Envelope & { buttons: number; needAck?: boolean; now?: number },
+  env: Envelope & { buttons: number; needAck?: boolean; now?: number; analog?: AnalogState },
 ): Buffer {
   const payload = PacketStructure();
-  const ts = Buffer.alloc(8);
-  ts.writeBigUInt64BE(BigInt(env.now ?? Date.now()));
-  payload.writeBytes(ts);
+  payload.writeBytes(gamepadTimestamp(env.now ?? Date.now()));
   payload.writeUInt16(env.buttons);
-  for (let i = 0; i < 6; i++) payload.writeUInt32(0);
+  const a = env.analog ?? {};
+  const floats = Buffer.alloc(24);
+  [
+    clamp(a.leftTrigger, 0, 1), clamp(a.rightTrigger, 0, 1),
+    clamp(a.leftX, -1, 1), clamp(a.leftY, -1, 1),
+    clamp(a.rightX, -1, 1), clamp(a.rightY, -1, 1),
+  ].forEach((v, i) => floats.writeFloatBE(v, i * 4));
+  payload.writeBytes(floats);
   return seal(env, env.needAck === false ? FLAG_GAMEPAD : FLAG_GAMEPAD_ACKED, payload.toBuffer());
 }

@@ -13,6 +13,9 @@ const { sendButton, runMacro, sendMediaCommand, setInputOptions, pressBench } = 
 const { sendText, submitText, cancelText } = require('../xbox/text');
 const { getLayout, listLayouts } = require('../osk/registry');
 const { typeOnOsk, cancelOskTyping, resetPosition } = require('../osk/typer');
+const { sendSticks, probeSticks } = require('../xbox/gamepad');
+
+const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
 async function oskType(msg) {
   const layout = getLayout(msg.layout);
@@ -35,6 +38,8 @@ const HANDLERS = {
   osk_reset:   msg => { resetPosition(msg.layout); return { ok: true }; },
   osk_list:    ()  => ({ ok: true, layouts: listLayouts() }),
   input_options: msg => setInputOptions(msg),
+  stick_probe: msg => probeSticks({ lx: num(msg.lx), ly: num(msg.ly), count: Math.min(50, num(msg.count) || 10), periodMs: num(msg.periodMs) || 100 }),
+  sticks:      msg => sendSticks({ leftX: num(msg.lx), leftY: num(msg.ly), rightX: num(msg.rx), rightY: num(msg.ry) }),
   press_bench: msg => pressBench(msg.count),
 };
 
@@ -50,6 +55,8 @@ const ACK_TYPE = {
   osk_reset:   'osk_reset_ack',
   osk_list:    'osk_layouts',
   input_options: 'input_options_ack',
+  sticks:      null, // high-frequency: no ack
+  stick_probe: 'stick_probe_ack',
   press_bench: 'press_bench_ack',
 };
 
@@ -80,7 +87,7 @@ function attachWebSocket(wss) {
         const handler = HANDLERS[msg.type];
         if (!handler) return;
         const result = await handler(msg, ws);
-        ws.send(JSON.stringify({ type: ACK_TYPE[msg.type], ...result }));
+        if (ACK_TYPE[msg.type]) ws.send(JSON.stringify({ type: ACK_TYPE[msg.type], ...result }));
       } catch (err) {
         ws.send(JSON.stringify({ type: 'error', error: err.message }));
       }

@@ -16,6 +16,7 @@ const state = {
   sgClient: null,
   connectionStatus: 'disconnected', // 'disconnected' | 'discovering' | 'connecting' | 'connected'
   connectedConsole: null,           // { ip } when connected
+  knownConsole: null,               // { ip, name?, lastConnectedAt } last console we connected to
   lastError: null,
   inputReady: false,                // true once at least one input channel is open
   reconnectTimer: null,             // setTimeout handle for the auto-reconnect attempt
@@ -45,7 +46,9 @@ function getChannelStatus() {
     const mgr = state.sgClient._managers[name];
     result[name] = {
       status: mgr._channel_manager ? mgr._channel_manager.getStatus() : 'unknown',
-      channelId: mgr._channel_manager ? mgr._channel_manager._channel_server_id : null,
+      channelId: mgr._channel_manager && mgr._channel_manager._channel_server_id
+        ? Buffer.from(mgr._channel_manager._channel_server_id).toString('hex')
+        : null,
       clientId: mgr._channel_manager ? mgr._channel_manager._channel_client_id : null,
     };
   }
@@ -61,6 +64,7 @@ function snapshot() {
   return {
     status: state.connectionStatus,
     console: state.connectedConsole,
+    knownConsole: state.knownConsole,
     inputReady: state.inputReady,
     lastError: state.lastError,
     activeApp: state.sgClient ? state.sgClient.getActiveApp() : null,
