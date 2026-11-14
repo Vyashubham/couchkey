@@ -1,13 +1,15 @@
-# xbox-keyboard
+# Couchkey
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D22.9-brightgreen)](https://nodejs.org/)
-[![CI](https://github.com/Vyashubham/xbox-keyboard/actions/workflows/ci.yml/badge.svg)](https://github.com/Vyashubham/xbox-keyboard/actions/workflows/ci.yml)
+[![CI](https://github.com/Vyashubham/couchkey/actions/workflows/ci.yml/badge.svg)](https://github.com/Vyashubham/couchkey/actions/workflows/ci.yml)
 
 > Control your Xbox Series X|S or Xbox One from your laptop keyboard over your local network.
 > No mobile app. No controller. No Microsoft account login. Just `npm start` and open a browser tab.
+>
+> *Couchkey is an independent project, not affiliated with or endorsed by Microsoft. Xbox is a trademark of Microsoft.*
 
-`xbox-keyboard` is a small Node.js server that speaks the Xbox SmartGlass
+Couchkey is a small Node.js server that speaks the Xbox SmartGlass
 protocol over UDP, serves a tiny web GUI, and bridges keystrokes from your
 browser into gamepad input on your Xbox. Free and open-source — the goal
 is that anyone with a console and a laptop on the same Wi-Fi can use it.
@@ -49,8 +51,8 @@ random disconnects. This is the small, local-only alternative.
 ## Quick start
 
 ```bash
-git clone https://github.com/Vyashubham/xbox-keyboard.git
-cd xbox-keyboard
+git clone https://github.com/Vyashubham/couchkey.git
+cd couchkey
 npm install
 npm start
 ```

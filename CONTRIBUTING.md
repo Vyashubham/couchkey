@@ -1,4 +1,4 @@
-# Contributing to xbox-keyboard
+# Contributing to Couchkey
 
 Thanks for considering a contribution. This project is small and the
 maintainer load is one person, so the bar is:
@@ -15,8 +15,8 @@ maintainer load is one person, so the bar is:
 ## Development setup
 
 ```bash
-git clone https://github.com/Vyashubham/xbox-keyboard.git
-cd xbox-keyboard
+git clone https://github.com/Vyashubham/couchkey.git
+cd couchkey
 npm install
 npm start
 ```
@@ -78,7 +78,7 @@ behaviors are not documented anywhere we can lint against.
 ## Easiest first contribution: an app keyboard layout
 
 If an app on your Xbox has its own on-screen keyboard, you can teach
-xbox-keyboard to type into it. Take a photo of the keyboard, write a
+Couchkey to type into it. Take a photo of the keyboard, write a
 `layouts/<app>.json` (format at the top of `src/osk/layout.js`, examples in
 `layouts/`), add a planner test, and test it on your console. Set
 `"verified": true` only once it typed correctly.

@@ -1,9 +1,8 @@
 # Architecture
 
-This document describes how xbox-keyboard is put together today, what is
-wrong with that, and the structure we are moving to. The target section is
-a **proposal under review** — see [ROADMAP.md](ROADMAP.md) for the open
-decisions and the tickets that implement it.
+This document describes how Couchkey is put together today, what is
+wrong with that, and the structure we are moving to. Decisions and the
+tickets that implement them are in [ROADMAP.md](ROADMAP.md).
 
 ---
 
@@ -90,7 +89,7 @@ Grouped by severity. Each maps to a ticket in [ROADMAP.md](ROADMAP.md).
 
 ---
 
-## 3. Target structure (proposal)
+## 3. Target structure
 
 Principles:
 
@@ -153,7 +152,7 @@ Browser ──typed WS msg──▶ ws router ──▶ service ──▶ Consol
 
 ---
 
-## 4. Client (GUI) — proposal
+## 4. Client (GUI)
 
 ### Screens and flows
 
@@ -190,7 +189,7 @@ App
 
 ### State management
 
-- **Server is the source of truth** for connection, channels, text session,
+- **The host is the source of truth** for connection, channels, text session,
   and typing progress. The client holds a read-only mirror updated by
   typed WS events, plus local UI state (open panels, form drafts).
 - One small store (no global mutable variables). Every outbound action goes
@@ -205,11 +204,11 @@ App
   support.
 - Every action gives feedback within 100 ms (pressed state), and every
   failure says what to do next.
-- Works at 360 px wide (phone on the same Wi-Fi, once LAN mode exists).
+- Works at 360 px wide: phones on the same Wi-Fi are first-class clients.
 
 ---
 
-## 5. Logging & error handling — proposal
+## 5. Logging & error handling
 
 Two streams, both structured JSON lines with ISO timestamps:
 
@@ -232,3 +231,57 @@ Rules:
   (`client_error` message) so browser-side crashes land in the same log.
 - **Debug report:** one button bundles recent logs (already redacted),
   versions, and settings for bug reports.
+
+---
+
+## 6. Deployment: host or join
+
+There is no always-on device to rely on (the TV, router and smart
+speakers can't run custom software), so Couchkey ships as a **desktop app
+that any household member can run**. Whoever opens it first hosts.
+
+```
+   Laptop A (host)                 Laptop B (client)        Phone (client)
+ ┌──────────────────┐            ┌────────────────┐       ┌──────────────┐
+ │ Electron shell   │            │ Electron shell │       │ Browser/PWA  │
+ │  ├ server (hub)  │◀──WS/HTTP──│  └ GUI         │       │  └ GUI       │
+ │  │  └ SmartGlass ─┼──UDP──▶ Xbox                │       └──────┬───────┘
+ │  └ GUI           │◀──────────────────────────────────────WS/HTTP┘
+ └──────────────────┘
+        ▲  mDNS: _couchkey._tcp (host id, version, started-at)
+```
+
+**Launch sequence**
+
+1. Browse mDNS for `_couchkey._tcp` for ~1.5 s.
+2. Found a host → open its GUI as a client (no second SmartGlass session).
+3. None found → start the server, advertise, connect to the Xbox when it
+   appears (polling discovery), and open the local GUI.
+
+**Collisions and handover**
+
+- *Two apps start at once:* both advertise; each sees the other; the one
+  with the earliest start time (tie: lowest host id) stays host, the other
+  stops its server and becomes a client. Converges within 3 s.
+- *Host quits or sleeps:* clients lose the WebSocket and the mDNS record
+  expires; the remaining desktop apps re-run the election; the winner
+  starts hosting and clients reconnect to it. Typing in progress is
+  cancelled and reported, not silently replayed.
+- *Version mismatch:* host and client exchange protocol versions on
+  connect; an incompatible client is told to update instead of
+  misbehaving.
+- *Guest Wi-Fi with client isolation:* devices there can't see the host;
+  the GUI explains this when no host and no Xbox can be found.
+
+**Multi-user rules**
+
+- Everyone on the Wi-Fi can control the console (household mode).
+- Button presses from different people interleave; app-keyboard typing
+  takes a lock that shows who holds it.
+- The host can lock control to their own devices; an approved-devices
+  mode exists for shared networks.
+
+**Desktop shell responsibilities** (Electron): tray icon showing
+host/client status, start-at-login (optional), system-level keyboard
+capture with a release hotkey, local-network permission prompt with an
+explanation, update check against GitHub Releases.

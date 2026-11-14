@@ -4,7 +4,7 @@ Guidance for AI coding agents (and humans) working in this repo.
 
 ## What this is
 
-xbox-keyboard: a local Node server + web GUI that controls an Xbox over the
+Couchkey: a local Node server + web GUI that controls an Xbox over the
 SmartGlass protocol. Read `docs/ARCHITECTURE.md` first; the plan and open
 decisions are in `docs/ROADMAP.md`.
 

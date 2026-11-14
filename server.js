@@ -31,7 +31,7 @@ attachWebSocket(wss);
 server.listen(config.port, () => {
   // eslint-disable-next-line no-console
   console.log(`
-xbox-keyboard listening on http://localhost:${config.port}
+couchkey listening on http://localhost:${config.port}
 
 Session log: ${logPaths.sessionLog}
 Latest log:  ${logPaths.latestLog}

@@ -1,6 +1,6 @@
 # Roadmap & backlog
 
-Status: **proposal, awaiting maintainer review** (Nov 2026).
+Status: **approved** (Nov 2026). Decisions below are settled unless marked open.
 Architecture background: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 Every ticket lists acceptance criteria (AC) and the tests that prove them.
@@ -12,18 +12,17 @@ with the same titles.
 
 ---
 
-## Decisions needed before M1
+## Decisions
 
-| # | Decision | Recommendation | Why |
-|---|---|---|---|
-| D1 | Language | **TypeScript** (server + client), strict mode | Shared WS schema types between server and GUI; safer refactors of protocol code; expected by contributors. |
-| D2 | GUI stack | **Vite + React + TypeScript**, plain CSS modules with design tokens | Biggest contributor pool, mature testing (Vitest, Testing Library, Playwright). App is local, so bundle size doesn't matter. Alternative: keep no-build vanilla JS (simpler, but slower to build a polished UI and harder to test). |
-| D3 | Project name | Keep **xbox-keyboard** (repo `Vyashubham/xbox-keyboard`) | Already public; describes the core idea. Local folder name doesn't matter. |
-| D4 | Network exposure | **localhost by default**; opt-in LAN mode protected by a pairing code | Today anyone on your Wi-Fi can control your Xbox. LAN mode later enables using a phone as the remote. |
-| D5 | SmartGlass library | **Keep, but isolate behind an adapter**; revisit replacing it after M2 | It works and is the only Node implementation, but it's unmaintained since 2022. The adapter makes replacing it a one-file job. |
-| D6 | Test without an Xbox | **FakeConsole at the adapter level** + recorded packet fixtures | A full UDP SmartGlass simulator (handshake + crypto) is weeks of work; the adapter fake covers services, server, and UI. |
-
----
+| # | Decision | Outcome |
+|---|---|---|
+| D1 | Language | **TypeScript**, strict, server + client. |
+| D2 | GUI stack | **Vite + React + TypeScript**, CSS modules with design tokens. Vitest, Testing Library, Playwright. |
+| D3 | Name | **Couchkey** (renamed from xbox-keyboard; "Xbox" in a product name conflicts with Microsoft's trademark guidance). |
+| D4 | Where it runs | **Desktop app (Electron) that hosts or joins.** Anyone downloads it; on launch it looks for a Couchkey host on the Wi-Fi and joins it, otherwise becomes the host. One host per network, automatic handover when the host leaves. Phones join through the browser. Anyone on the Wi-Fi may use it (household mode); approved-devices mode and a host lock are optional. See ARCHITECTURE §6. |
+| D5 | SmartGlass library | Keep `xbox-smartglass-core-node`, isolated behind one adapter. Replacing it becomes a one-file change. |
+| D6 | Testing without an Xbox | **FakeConsole at the adapter level** + recorded packet fixtures. Every PR that touches console behavior lists what to check on real hardware. |
+| D7 | Always-on hosts (later) | TV (LG webOS can't keep a background server), Cox gateway and Echo can't run custom software. Docker / Raspberry Pi images stay on the backlog for people who have an always-on device. Microsoft's cloud remote API is a possible later add-on for power/navigation from anywhere (needs Microsoft login, slower, no confirmed text input). |
 
 ## Milestones
 
@@ -31,10 +30,10 @@ with the same titles.
 |---|---|---|
 | **M0 Foundation** ✅ this PR | Clean repo, docs, conventions | Docs below merged; CI on Node 22/24/26 |
 | **M1 Backbone** | Toolchain, test harness, logging, error handling, adapter | All existing behavior still works; CI runs typecheck + unit + integration + e2e |
-| **M2 Core services** | Rewrite server logic on the new backbone, TDD | Feature parity with today, every service covered by tests against FakeConsole |
+| **M2 Core services** | Rewrite server logic on the new backbone, TDD; host/join and multi-user | Feature parity with today plus host election, every service covered by tests against FakeConsole |
 | **M3 New GUI** | The polished UI from ARCHITECTURE §4 | All flows usable keyboard-only; e2e covers every screen; a11y checks pass |
 | **M4 On-console verification** | Prove it on real hardware | Test protocol run on Series X; layouts marked verified; findings documented |
-| **M5 Release 1.0** | Ship to the public | `npx xbox-keyboard` works; release automation; docs with GIFs |
+| **M5 Release 1.0** | Desktop app for macOS/Windows/Linux | Installers on GitHub Releases, auto-update check, `npx couchkey` for developers; docs with GIFs |
 
 ---
 
@@ -104,9 +103,21 @@ with the same titles.
 - AC: shared schema for every message; server validates inbound, client validates inbound; unknown/invalid messages rejected with a code; protocol version handshake.
 - Tests: schema round-trip; invalid message rejection; version mismatch.
 
-**T-207 HTTP API hardening + localhost bind** (D4)
-- AC: `HOST` default `127.0.0.1`; input validation; consistent error shape; LAN mode behind `HOST=0.0.0.0` + pairing code (pairing can land in M3).
+**T-207 HTTP API hardening**
+- AC: input validation on every route; consistent error shape; listens on the LAN (household mode, D4) with `HOST` override; `HOST=127.0.0.1` gives a private single-user mode.
 - Tests: integration tests for every route incl. bad input; bind address test.
+
+**T-208 Host discovery and election** (D4)
+- AC: hosts advertise `_couchkey._tcp` over mDNS with a host id, version, and start time; a launching app joins an existing host instead of starting a second one; if two start at once, a deterministic rule picks one (earliest start, then lowest id) and the other demotes itself within 3 s; when the host disappears, a remaining app takes over within 5 s and clients reconnect automatically.
+- Tests: election unit tests with a fake clock and fake mDNS (simultaneous start, host leaves, split brain heals); integration with two server instances on loopback.
+
+**T-209 Multi-user sessions**
+- AC: each client has a device name and id; state broadcasts include who is connected; app-keyboard typing takes a lock and shows who holds it; optional host lock ("only my devices") and approved-devices mode.
+- Tests: two WS clients: concurrent buttons both delivered; second typer gets a clear "Shubham's phone is typing" error; lock enforcement.
+
+**T-210 Xbox presence and power-on**
+- AC: hub watches for the console (cheap unicast discovery every few seconds), connects when it appears, shows "Xbox is off/asleep" otherwise; "Turn on Xbox" uses the SmartGlass power-on packet with the live id remembered from the last discovery.
+- Tests: FakeConsole appear/disappear cycles; power-on packet builder against a known-good fixture.
 
 ---
 
@@ -155,7 +166,9 @@ with the same titles.
 
 ## M5 — Release
 
-**T-501 Packaging** — `npx xbox-keyboard`, single command, opens the browser.
+**T-501 Desktop app** — Electron shell around the server: tray/menu-bar icon, host/join status, open GUI, start at login (optional), system-level keyboard capture with a release hotkey, first-run local-network permission explainer.
+**T-502a Installers** — macOS (dmg), Windows (exe), Linux (AppImage/deb) built in CI and attached to GitHub Releases; unsigned at first with clear install steps; signing when funded. `npx couchkey` for developers.
+**T-502b Update check** — notify when a newer release exists so hosts and clients don't drift; version mismatch between host and client handled gracefully.
 **T-502 Versioning & release automation** — semver, CHANGELOG, tagged releases with notes.
 **T-503 Docs** — README with GIFs, troubleshooting, FAQ ("why can't it type in X?").
 **T-504 Community** — issue labels, good-first-issues (layouts are ideal), discussion templates.
@@ -168,5 +181,6 @@ with the same titles.
 - Node floor 18 → 22.9 (18 and 20 are end-of-life); CI matrix 22/24/26
 - `.env` support (`--env-file-if-exists`) and `.env.example`
 - Research log moved to `docs/research/text-input.md`
+- Renamed to Couchkey; desktop host/join model decided (D3, D4)
 - README corrected (no false media-controls claim; app-keyboard feature documented as experimental)
 - CLAUDE.md, CONTRIBUTING (branching, conventional commits, TDD), SECURITY.md, CODE_OF_CONDUCT.md, CHANGELOG.md, Dependabot, updated PR template

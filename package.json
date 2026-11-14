@@ -1,7 +1,7 @@
 {
-  "name": "xbox-keyboard",
+  "name": "couchkey",
   "version": "0.1.0",
-  "description": "Control your Xbox Series X|S or Xbox One from your laptop keyboard over WiFi, using the SmartGlass protocol. No mobile app, no controller, no extra hardware.",
+  "description": "Control your Xbox from any keyboard or phone on your Wi-Fi. Local, open source, no extra hardware.",
   "keywords": [
     "xbox",
     "xbox-series-x",
@@ -13,13 +13,13 @@
     "websocket",
     "homelab"
   ],
-  "homepage": "https://github.com/Vyashubham/xbox-keyboard#readme",
+  "homepage": "https://github.com/Vyashubham/couchkey#readme",
   "bugs": {
-    "url": "https://github.com/Vyashubham/xbox-keyboard/issues"
+    "url": "https://github.com/Vyashubham/couchkey/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Vyashubham/xbox-keyboard.git"
+    "url": "git+https://github.com/Vyashubham/couchkey.git"
   },
   "license": "MIT",
   "author": "Shubham Vyas",
