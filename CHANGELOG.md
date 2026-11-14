@@ -17,7 +17,7 @@ All notable changes are recorded here. Format:
 - Architecture, roadmap, security policy, code of conduct, CLAUDE.md.
 
 ### Changed
-- Requires Node.js 22.9 or newer (18 and 20 are end-of-life).
+- Requires Node.js 22.13 or newer (18 and 20 are end-of-life).
 - Research notes moved to `docs/research/text-input.md`.
 
 ### Fixed

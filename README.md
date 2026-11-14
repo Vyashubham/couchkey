@@ -1,7 +1,7 @@
 # Couchkey
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Node.js](https://img.shields.io/badge/node-%3E%3D22.9-brightgreen)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D22.13-brightgreen)](https://nodejs.org/)
 [![CI](https://github.com/Vyashubham/couchkey/actions/workflows/ci.yml/badge.svg)](https://github.com/Vyashubham/couchkey/actions/workflows/ci.yml)
 
 > Control your Xbox Series X|S or Xbox One from your laptop keyboard over your local network.
@@ -44,7 +44,7 @@ random disconnects. This is the small, local-only alternative.
 
 ## Requirements
 
-- **Node.js 22.9 or newer**
+- **Node.js 22.13 or newer**
 - **Xbox Series X|S or Xbox One** on the same local network as your computer
 - Xbox setting: **Settings → Devices & connections → Remote features → Xbox app preferences → Allow connections from any device**
 
@@ -54,7 +54,7 @@ random disconnects. This is the small, local-only alternative.
 git clone https://github.com/Vyashubham/couchkey.git
 cd couchkey
 npm install
-npm start
+npm start        # builds, then starts the server
 ```
 
 Then open <http://localhost:3247> in your browser.
@@ -141,20 +141,21 @@ For a deeper writeup of the protocol details, see [docs/PROTOCOL.md](docs/PROTOC
 ## Project layout
 
 ```
-server.js                    Entry point: builds HTTP + WS, wires modules, listens
+server.ts                    Entry point: builds HTTP + WS, wires modules, listens
 public/index.html            The GUI (single file, no build step — being replaced, see roadmap)
 layouts/                     App on-screen keyboard layouts (JSON)
 src/
-  config.js                  All tunables (env-driven)
+  config.ts                  All tunables (env-driven)
+  paths.ts                   Project-root paths (works from src/ and dist/)
   state.js                   Shared mutable connection / text-channel state
-  bus.js                     EventEmitter that decouples domain modules from transports
+  bus.ts                     EventEmitter that decouples domain modules from transports
   logger.js                  Protocol logger: ring buffer + per-session files + bus events
   macros.js                  Multi-step button sequences
   osk/                       App-keyboard typing: layout model, path planner, typer
   protocol/                  Raw SmartGlass packet builders, channel-open workaround
   xbox/                      Connection, heartbeat, gamepad/media input, text channel
   server/                    Express routes and WebSocket dispatch
-test/                        Unit tests (node:test)
+test/                        Vitest tests (unit/, integration/)
 docs/
   ARCHITECTURE.md            How it fits together, audit, target design
   ROADMAP.md                 Plan and ticket backlog
