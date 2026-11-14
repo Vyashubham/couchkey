@@ -11,6 +11,14 @@ const config = {
   // Input throttling
   buttonMinIntervalMs: parseInt(process.env.BUTTON_MIN_INTERVAL_MS, 10) || 150,
 
+  // Acknowledged gamepad presses (experimental until verified on a
+  // console). When on, every press asks the Xbox to confirm it, so a
+  // dropped press is reported instead of silently desyncing on-screen
+  // keyboard typing. Can also be toggled at runtime from the GUI.
+  gamepadAck: process.env.GAMEPAD_ACK === '1',
+  gamepadHoldMs: parseInt(process.env.GAMEPAD_HOLD_MS, 10) || 60,
+  gamepadAckTimeoutMs: parseInt(process.env.GAMEPAD_ACK_TIMEOUT_MS, 10) || 1000,
+
   // Connection lifecycle
   reconnectDelayMs: parseInt(process.env.RECONNECT_DELAY_MS, 10) || 5000,
   channelMonitorIntervalMs: 1000,

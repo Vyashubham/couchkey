@@ -18,6 +18,10 @@ const PacketStructure = require('xbox-smartglass-core-node/src/packet/structure'
 const FLAG_SYSTEM_TEXT_INPUT = Buffer.from('af2c', 'hex'); // 0xF2C
 const FLAG_SYSTEM_TEXT_ACK = Buffer.from('af34', 'hex');   // 0xF34
 const FLAG_SYSTEM_TEXT_DONE = Buffer.from('af35', 'hex');  // 0xF35
+// Gamepad (0xF0A). The library sends 0x8f0a (no ack requested); we
+// set the need_ack bit so the Xbox confirms every press it processed.
+const FLAG_GAMEPAD_ACKED = Buffer.from('af0a', 'hex');
+const FLAG_GAMEPAD = Buffer.from('8f0a', 'hex');
 
 const PACKET_TYPE_MESSAGE = Buffer.from('d00d', 'hex');
 const BLOCK_SIZE = 16;
@@ -141,7 +145,32 @@ function buildTextDonePacket({ xbox, channelId, sessionId, version, result }) {
   return sealMessage({ xbox, header, payloadBuf });
 }
 
+// Gamepad payload (flag 0xF0A), same layout the library packs:
+//   timestamp (u64 BE ms), buttons (u16 bitmask),
+//   left/right trigger, left/right thumbstick x/y (6 x 4 bytes, zero).
+function buildGamepadPacket({ xbox, channelId, buttons, needAck = true }) {
+  if (!xbox || !channelId) throw new Error('buildGamepadPacket: missing xbox or channelId');
+
+  const payload = PacketStructure();
+  const ts = Buffer.alloc(8);
+  ts.writeBigUInt64BE(BigInt(Date.now()));
+  payload.writeBytes(ts);
+  payload.writeUInt16(buttons);
+  for (let i = 0; i < 6; i++) payload.writeUInt32(0);
+
+  const payloadBuf = payload.toBuffer();
+  const header = buildMessageHeader({
+    xbox,
+    channelId,
+    flags: needAck ? FLAG_GAMEPAD_ACKED : FLAG_GAMEPAD,
+    payloadLength: payloadBuf.length,
+  });
+
+  return sealMessage({ xbox, header, payloadBuf });
+}
+
 module.exports = {
+  buildGamepadPacket,
   buildTextInputPacket,
   buildTextAckPacket,
   buildTextDonePacket,
