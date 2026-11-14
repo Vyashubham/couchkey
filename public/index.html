@@ -28,7 +28,7 @@
   .layout{display:flex;height:calc(100vh - 49px)}
 
   /* Left: controls */
-  .panel-left{width:280px;border-right:1px solid var(--border);padding:16px;display:flex;flex-direction:column;gap:12px;background:var(--surface);overflow-y:auto}
+  .panel-left{width:280px;flex-shrink:0;border-right:1px solid var(--border);padding:16px;display:flex;flex-direction:column;gap:12px;background:var(--surface);overflow-y:auto}
   .section-title{font:700 10px 'JetBrains Mono',monospace;color:var(--text2);text-transform:uppercase;letter-spacing:1.2px}
   .ip-row{display:flex;gap:6px}
   .ip-input{flex:1;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font:13px 'JetBrains Mono',monospace;outline:none}
@@ -72,7 +72,7 @@
   .mbtn:hover{border-color:var(--purple);color:var(--text)}
 
   /* Right: LOGS — the star of this version */
-  .panel-right{flex:1;display:flex;flex-direction:column;background:var(--bg)}
+  .panel-right{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--bg)}
   .log-header{padding:8px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;background:var(--surface)}
   .log-header .section-title{margin:0}
   .log-filter{padding:3px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font:11px 'JetBrains Mono',monospace;outline:none}
@@ -86,7 +86,7 @@
   .l-err .lvl{background:var(--red-dim);color:var(--red)}
   .l-proto .lvl{background:#2d1b69;color:var(--purple)}
   .log-entry .msg{color:var(--text)}
-  .log-entry .data{display:block;color:var(--text2);white-space:pre-wrap;font-size:11px;margin:2px 0 4px 24px;padding:4px 8px;background:var(--surface);border-radius:4px;max-height:200px;overflow:auto}
+  .log-entry .data{display:block;color:var(--text2);white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px;margin:2px 0 4px 24px;padding:4px 8px;background:var(--surface);border-radius:4px;max-height:200px;overflow:auto}
   .log-count{font:11px 'JetBrains Mono',monospace;color:var(--text2);margin-left:auto}
   .clear-btn{font:10px 'JetBrains Mono',monospace;padding:2px 8px;border-radius:3px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);cursor:pointer}
 </style>
