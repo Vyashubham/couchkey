@@ -83,6 +83,86 @@ async function sendButtonAcked(button) {
   return { ok: true, button, rttMs };
 }
 
+// Current gamepad state we've told the Xbox about. Every packet carries
+// the full state, so stick updates must include held buttons (or they'd
+// release them) and button presses must include the stick position.
+let heldMask = 0;
+let analog = { leftX: 0, leftY: 0, rightX: 0, rightY: 0 };
+
+function sendCurrentState(channelId) {
+  const xbox = state.sgClient._console;
+  xbox.get_requestnum();
+  state.sgClient._send(buildGamepadPacket({ xbox, channelId, buttons: heldMask, needAck: false, analog }));
+}
+
+// Press + release without asking for confirmation. All buttons go through
+// here (not the library's sendCommand) so timestamps and state stay
+// consistent with stick updates.
+async function sendButtonRaw(button) {
+  if (!state.sgClient) return { ok: false, error: 'Not connected' };
+  const mask = BUTTONS[button];
+  if (mask === undefined) return { ok: false, error: `Unknown button: ${button}` };
+  const channelId = inputChannel();
+  if (!channelId) return { ok: false, error: 'Channel not ready. Try reconnecting.' };
+  heldMask |= mask;
+  sendCurrentState(channelId);
+  await sleep(100); // same hold time the library uses
+  heldMask &= ~mask;
+  const releaseChannel = inputChannel();
+  if (releaseChannel) sendCurrentState(releaseChannel);
+  plog('ok', `Button '${button}' sent`);
+  return { ok: true, button };
+}
+
+// Analog stick state, sent as fast as the GUI asks (it rate-limits to
+// ~30/s). Fire-and-forget: a lost update is superseded by the next one.
+let lastStickLog = 0;
+function sendSticks(next) {
+  if (!state.sgClient) return { ok: false, error: 'Not connected' };
+  const channelId = inputChannel();
+  if (!channelId) return { ok: false, error: 'Channel not ready. Try reconnecting.' };
+  analog = { ...analog, ...next };
+  sendCurrentState(channelId);
+  const now = Date.now();
+  if (now - lastStickLog > 2000) {
+    lastStickLog = now;
+    plog('info', 'Stick update', analog);
+  }
+  return { ok: true };
+}
+
+// Diagnostic: send `count` stick states with need_ack and report how the
+// Xbox answered each one (processed / rejected / no answer).
+async function probeSticks({ lx = 0.7, ly = 0, count = 10, periodMs = 100 } = {}) {
+  if (!state.sgClient) return { ok: false, error: 'Not connected' };
+  const channelId = inputChannel();
+  if (!channelId) return { ok: false, error: 'Channel not ready' };
+  ensureListener();
+  const results = [];
+  for (let i = 0; i < count; i++) {
+    const xbox = state.sgClient._console;
+    xbox.get_requestnum();
+    const seq = xbox._request_num;
+    const pending = acks.track(seq, config.gamepadAckTimeoutMs);
+    const t0 = Date.now();
+    state.sgClient._send(buildGamepadPacket({
+      xbox, channelId, buttons: 0, needAck: true,
+      analog: { leftX: lx, leftY: ly, rightX: 0, rightY: 0 },
+    }));
+    pending.then(o => results.push({ i, seq, outcome: o, ms: Date.now() - t0 }));
+    await sleep(periodMs);
+  }
+  // centre the stick and wait for stragglers
+  sendCurrentState(channelId);
+  await sleep(config.gamepadAckTimeoutMs + 100);
+  const summary = results.reduce((m, r) => ({ ...m, [r.outcome]: (m[r.outcome] || 0) + 1 }), {});
+  plog('info', 'Stick probe', { lx, ly, count, periodMs, summary });
+  return { ok: true, summary, results: results.sort((a, b) => a.i - b.i) };
+}
+
 module.exports = {
+  probeSticks,
   sendButtonAcked,
+  sendButtonRaw,
+  sendSticks,
 };

@@ -143,6 +143,10 @@
         </div>
       </div>
       <div class="sysrow">
+        <div class="sbtn" data-btn="left_shoulder">LB<span class="kh">Q</span></div>
+        <div class="sbtn" data-btn="right_shoulder">RB<span class="kh">E</span></div>
+      </div>
+      <div class="sysrow">
         <div class="sbtn" data-btn="nexus">Xbox<span class="kh">Esc</span></div>
         <div class="sbtn" data-btn="view">View<span class="kh">Tab</span></div>
         <div class="sbtn" data-btn="menu">Menu<span class="kh">M</span></div>
@@ -357,7 +361,9 @@ async function doDisconnect(){
 }
 
 // Input
-const KEY_MAP={'ArrowUp':'up','ArrowDown':'down','ArrowLeft':'left','ArrowRight':'right','Enter':'a','Backspace':'b','Escape':'nexus','Tab':'view','KeyM':'menu','KeyX':'x','KeyY':'y'};
+const KEY_MAP={'ArrowUp':'up','ArrowDown':'down','ArrowLeft':'left','ArrowRight':'right','Enter':'a','Backspace':'b','Escape':'nexus','Tab':'view','KeyM':'menu','KeyX':'x','KeyY':'y',
+  // Shoulder buttons. In Edge on Xbox: LB/RB = previous/next tab.
+  'KeyQ':'left_shoulder','KeyE':'right_shoulder','BracketLeft':'left_shoulder','BracketRight':'right_shoulder'};
 const MACRO_MAP={'ctrl+KeyG':'open_guide','ctrl+KeyH':'go_home','ctrl+KeyF':'open_search','ctrl+KeyS':'screenshot','ctrl+KeyR':'record_clip','ctrl+KeyP':'parties','ctrl+KeyQ':'quick_settings'};
 
 function toggleCapture(){

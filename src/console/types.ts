@@ -3,13 +3,15 @@
 // implementation knows about the protocol library. Tests and demo mode
 // use FakeConsole.
 
+// SmartGlass gamepad bitmask. It is Windows.Gaming.Input.GamepadButtons
+// shifted left by 2 (A: 4 -> 16, DPadUp: 64 -> 256, LeftShoulder:
+// 1024 -> 4096), with Nexus in bit 1. So Menu (1) -> 4 and View (2) -> 8.
+// xbox-smartglass-core-node has Menu and View swapped; verified on a
+// Series X (Nov 2026): bitmask 4 opens Edge's context menu (Menu).
 export const BUTTON_MASKS = {
   nexus: 2,
-  // NOTE: OpenXbox docs list Menu = 4 and View = 8; the library has them
-  // the other way round. Kept as the library has it until verified on a
-  // console (ROADMAP T-402).
-  view: 4,
-  menu: 8,
+  menu: 4,
+  view: 8,
   a: 16,
   b: 32,
   x: 64,

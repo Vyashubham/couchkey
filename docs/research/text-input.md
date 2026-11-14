@@ -112,6 +112,36 @@ system text session" lives in each app, not in the SmartGlass protocol.
 | **Miracast / DLNA / AirPlay input** | — | — | — | — | These are media transports. None carry HID. Xbox doesn't receive Miracast anymore. |
 | **Pi Zero / Pico W / ESP32 USB-HID bridge** | Yes | Yes | Yes (~$6–$15) | No | Plug a tiny board into the Xbox's USB port. Board acts as a USB keyboard. Laptop talks to it over Wi-Fi. **The canonical workaround** for this exact problem. |
 
+## Live console findings (Series X, Nov 2026)
+
+Tested against a retail Series X with the project's own probes.
+
+- **Menu and View were swapped in `xbox-smartglass-core-node`.** The
+  SmartGlass bitmask is `Windows.Gaming.Input.GamepadButtons << 2`, so
+  Menu = 4 and View = 8 (also what OpenXbox's Python enum says). Bitmask 4
+  opened Edge's context menu. Fixed in `src/console/types.ts`.
+- **Shoulder buttons work** (LB/RB = previous/next tab in Edge). The
+  library couldn't send them; we build the gamepad packet ourselves.
+- **Gamepad timestamps must use one encoding per session.** The library
+  writes the decimal millisecond string read as hex; a plain u64 is a far
+  smaller number. After any library-sent press, the Xbox ignored our
+  plain-timestamp presses. All presses now go through one sender using
+  the library's encoding.
+- **The keep-alive must request a reply.** The library's keep-alive
+  Acknowledge had need_ack off and reported our own sequence counter. After
+  gamepad input the Xbox stopped pinging us, nothing made it answer, and
+  the session timed out while the console was still accepting input.
+  Fixed: need_ack on, low watermark = last sequence received.
+- **Analog sticks are accepted but don't drive a cursor.** With need_ack
+  on, the Xbox confirmed 50/50 stick messages as processed, yet Edge's
+  free cursor never moved (values -1..1 and ±32767, 5-30 updates/s).
+  SmartGlass input drives UI navigation only; apps reading raw gamepad
+  state (Edge's cursor, games) don't see it. A real cursor needs USB HID
+  (the Pico/ESP32 bridge) or Remote Play.
+- **Edge on Xbox:** X opens a new tab (address bar gets focus, so a text
+  session starts); one of Menu/View toggles full screen. No controller
+  shortcut for closing a tab was found.
+
 ## The three locks that gate everything
 
 If you take nothing else away from this document, take these three:

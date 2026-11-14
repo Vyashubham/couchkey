@@ -7,6 +7,11 @@ All notable changes are recorded here. Format:
 ## [Unreleased]
 
 ### Added
+- Remembers your Xbox and reconnects automatically on startup
+  (`AUTO_CONNECT=0` to disable).
+- LB/RB on Q/E (or [ and ]): previous/next tab in Edge.
+- Analog stick messages and a stick probe diagnostic (the Xbox accepts
+  them but SmartGlass doesn't move Edge's cursor; see research notes).
 - App keyboard typing (experimental): types into apps that draw their own
   on-screen keyboard (YouTube, Netflix) by driving it with d-pad presses.
   Layouts in `layouts/`, not yet verified on a console.
@@ -21,6 +26,12 @@ All notable changes are recorded here. Format:
 - Research notes moved to `docs/research/text-input.md`.
 
 ### Fixed
+- Menu and View were swapped (library bug); Tab now sends View and M
+  sends Menu, verified on a Series X.
+- Connection no longer times out after bursts of button presses: the
+  keep-alive now asks the Xbox to reply.
+- Presses sent by Couchkey and by the library no longer conflict (one
+  sender, one timestamp encoding).
 - Text with accents or emoji: SmartGlass string length is now the UTF-8
   byte count (the library wrote the character count). Needs on-console
   confirmation.

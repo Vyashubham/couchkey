@@ -1,55 +1,29 @@
 'use strict';
 
-// Gamepad and media input. Thin wrappers around the SmartGlass
-// library's SystemInput and SystemMedia channel managers, with a
-// minimum-interval throttle on gamepad presses (the Xbox starts
-// dropping messages and the heartbeat layer falls behind if we fire
-// faster than ~6 per second).
+// Gamepad and media input: a minimum-interval throttle on gamepad
+// presses, macros, and media commands via the library's SystemMedia
+// manager.
 
 const config = require('../config');
 const { plog } = require('../logger');
 const MACROS = require('../macros');
 const state = require('../state');
-const { sendButtonAcked } = require('./gamepad');
+const { sendButtonAcked, sendButtonRaw } = require('./gamepad');
 
 async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// Every press goes through our own gamepad sender (src/xbox/gamepad.js),
+// never the library's SystemInput.sendCommand: the library has Menu/View
+// swapped, can't send shoulders or sticks, and its timestamp encoding
+// must match ours or the Xbox ignores one side (see packets.ts).
 async function sendButton(button) {
   if (!state.sgClient) return { ok: false, error: 'No client' };
-
-  if (config.gamepadAck) {
-    const wait = config.buttonMinIntervalMs - (Date.now() - state.lastButtonTime);
-    if (wait > 0) await sleep(wait);
-    state.lastButtonTime = Date.now();
-    return sendButtonAcked(button);
-  }
-
-  const mgr = state.sgClient.getManager('system_input');
-  if (!mgr) return { ok: false, error: 'No system_input manager' };
-
-  const channelOpen = mgr._channel_manager ? mgr._channel_manager.getStatus() : false;
-  if (!channelOpen) {
-    plog('warn', `sendButton('${button}') — channel not open`);
-    return { ok: false, error: 'Channel not ready. Try reconnecting.' };
-  }
-
-  const now = Date.now();
-  const timeSinceLast = now - state.lastButtonTime;
-  if (timeSinceLast < config.buttonMinIntervalMs) {
-    await sleep(config.buttonMinIntervalMs - timeSinceLast);
-  }
+  const wait = config.buttonMinIntervalMs - (Date.now() - state.lastButtonTime);
+  if (wait > 0) await sleep(wait);
   state.lastButtonTime = Date.now();
-
-  try {
-    await mgr.sendCommand(button);
-    plog('ok', `Button '${button}' sent`);
-    return { ok: true, button };
-  } catch (err) {
-    plog('err', `Button '${button}' failed: ${JSON.stringify(err)}`);
-    return { ok: false, error: err.error || JSON.stringify(err) };
-  }
+  return config.gamepadAck ? sendButtonAcked(button) : sendButtonRaw(button);
 }
 
 async function runMacro(macroName) {
