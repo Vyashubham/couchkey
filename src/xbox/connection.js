@@ -155,8 +155,22 @@ async function connectToConsole(ip) {
   plog('info', `Managers added. Starting connect to ${ip}...`);
 
   try {
-    await sgClient.connect(ip);
+    // The library waits for a connect_response forever. If the Xbox never
+    // answers (e.g. it still holds a stale session from a process that
+    // was killed), give up so the reconnect loop can try again.
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`No reply from the Xbox within ${config.connectTimeoutMs / 1000}s`)), config.connectTimeoutMs);
+    });
+    try {
+      await Promise.race([sgClient.connect(ip), timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
   } catch (err) {
+    if (myGeneration === state.connectionGeneration) {
+      try { sgClient._closeClient(); } catch (_) { /* ignore */ }
+    }
     state.connectionStatus = 'disconnected';
     state.lastError = parseConnectionError(err);
     state.inputReady = false;
