@@ -18,11 +18,13 @@ if (config.smartglassDebug) {
 const { paths: logPaths } = require('./src/logger');
 const { registerHttpRoutes } = require('./src/server/http');
 const { attachWebSocket } = require('./src/server/ws');
+const { loadLayouts } = require('./src/osk/registry');
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
+loadLayouts();
 registerHttpRoutes(app);
 attachWebSocket(wss);
 

@@ -11,6 +11,15 @@ const state = require('../state');
 const { plog, getRecentLogs } = require('../logger');
 const { sendButton, runMacro, sendMediaCommand } = require('../xbox/input');
 const { sendText, submitText, cancelText } = require('../xbox/text');
+const { getLayout, listLayouts } = require('../osk/registry');
+const { typeOnOsk, cancelOskTyping, resetPosition } = require('../osk/typer');
+
+async function oskType(msg) {
+  const layout = getLayout(msg.layout);
+  if (!layout) return { ok: false, error: `Unknown OSK layout: ${msg.layout}` };
+  if (msg.fresh) resetPosition(layout.id); // keyboard was just opened
+  return typeOnOsk(layout, String(msg.text || ''));
+}
 
 // Map of inbound WS message type → (msg, ws) → handler that returns
 // an object to wrap in an ack reply.
@@ -21,6 +30,10 @@ const HANDLERS = {
   text:        msg => sendText(msg.text),
   text_submit: ()  => submitText(),
   text_cancel: ()  => cancelText(),
+  osk_type:    msg => oskType(msg),
+  osk_cancel:  ()  => { cancelOskTyping(); return { ok: true }; },
+  osk_reset:   msg => { resetPosition(msg.layout); return { ok: true }; },
+  osk_list:    ()  => ({ ok: true, layouts: listLayouts() }),
 };
 
 const ACK_TYPE = {
@@ -30,6 +43,10 @@ const ACK_TYPE = {
   text:        'text_ack',
   text_submit: 'text_submit_ack',
   text_cancel: 'text_cancel_ack',
+  osk_type:    'osk_type_ack',
+  osk_cancel:  'osk_cancel_ack',
+  osk_reset:   'osk_reset_ack',
+  osk_list:    'osk_layouts',
 };
 
 function attachWebSocket(wss) {

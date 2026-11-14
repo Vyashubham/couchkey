@@ -1,0 +1,19 @@
+{
+  "id": "xbox-system",
+  "name": "Xbox system keyboard (Edge, Store, search)",
+  "verified": false,
+  "notes": "FALLBACK ONLY. This is the system on-screen keyboard (seen in Edge, Nov 2026). Apps that show it open a SmartGlass text session, so SystemText typing (instant) should be used instead; this layout is for when that fails. The side columns (#+=, cursor arrows, shift, enter) and the backspace key are left out on purpose: we never need them and the planner never moves into keys it doesn't know. Y = space, X = backspace. The keyboard seems to remember the last key, so the start key is a guess; use a fresh reset only when the highlight is known.",
+  "start": "y",
+  "wrap": { "h": false, "v": false },
+  "verticalColumn": "memory",
+  "caseInsensitive": true,
+  "rows": [
+    ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"],
+    ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"],
+    ["a", "s", "d", "f", "g", "h", "j", "k", "l", "'"],
+    ["z", "x", "c", "v", "b", "n", "m", ",", ".", "?"],
+    ["/", { "key": "space", "span": 8 }, ".com"]
+  ],
+  "chars": { " ": "space" },
+  "shortcuts": { "y": "space", "x": "backspace" }
+}

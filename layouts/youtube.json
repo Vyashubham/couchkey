@@ -1,0 +1,18 @@
+{
+  "id": "youtube",
+  "name": "YouTube",
+  "verified": false,
+  "notes": "From a photo of the Xbox YouTube app search screen (Nov 2026). Highlight starts on A. Left of column 0 is the suggestions list and up from row 0 is the search bar, so there is no safe corner to re-anchor on. Bottom-row spans are estimated from key positions. Digits/symbols live on the &123 page, not modelled yet.",
+  "start": "a",
+  "wrap": { "h": false, "v": false },
+  "verticalColumn": "memory",
+  "caseInsensitive": true,
+  "rows": [
+    ["a", "b", "c", "d", "e", "f", "g", "backspace"],
+    ["h", "i", "j", "k", "l", "m", "n", "symbols"],
+    ["o", "p", "q", "r", "s", "t", "u", "language"],
+    ["v", "w", "x", "y", "z", "-", "'"],
+    [{ "key": "space", "span": 2 }, { "key": "clear", "span": 2 }, { "key": "search", "span": 3 }]
+  ],
+  "chars": { " ": "space" }
+}
