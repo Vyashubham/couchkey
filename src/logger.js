@@ -31,7 +31,7 @@ try {
   fs.writeFileSync(latestJsonPath, '');
 } catch (e) {
   // non-fatal; we'll log to console below
-  // eslint-disable-next-line no-console
+   
   console.warn('Could not truncate latest log files:', e.message);
 }
 
@@ -53,10 +53,10 @@ function plog(level, msg, data) {
   if (ringBuffer.length > config.protocolLogRingBufferSize) ringBuffer.shift();
 
   const icon = LEVEL_ICONS[level] || '.';
-  // eslint-disable-next-line no-console
+   
   console.log(`[${icon}] ${msg}`);
   if (data !== undefined) {
-    // eslint-disable-next-line no-console
+     
     console.log('   ', typeof data === 'string' ? data : JSON.stringify(data, null, 2));
   }
 
