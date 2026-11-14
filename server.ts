@@ -18,7 +18,7 @@ if (config.smartglassDebug) {
 const { plog, paths: logPaths } = require('./src/logger') as typeof import('./src/logger');
 const { registerHttpRoutes } = require('./src/server/http') as typeof import('./src/server/http');
 const { attachWebSocket } = require('./src/server/ws') as typeof import('./src/server/ws');
-const { autoConnect } = require('./src/xbox/connection') as typeof import('./src/xbox/connection');
+const { autoConnect, disconnect } = require('./src/xbox/connection') as typeof import('./src/xbox/connection');
 /* eslint-enable @typescript-eslint/no-require-imports */
 import { loadLayouts } from './src/osk/registry';
 
@@ -41,3 +41,18 @@ Latest log:  ${logPaths.latestLog}
 `);
   if (config.autoConnect) autoConnect();
 });
+
+// Tell the Xbox we're leaving before exiting, so it doesn't keep a stale
+// session that makes the next connect hang.
+let shuttingDown = false;
+function shutdown(signal: string): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  plog('info', `${signal} received, disconnecting from the Xbox and shutting down`);
+  try { disconnect(); } catch { /* best effort */ }
+  server.close();
+  // Give the disconnect packet a moment to leave the socket.
+  setTimeout(() => process.exit(0), 300).unref();
+}
+process.on('SIGINT', () => { shutdown('SIGINT'); });
+process.on('SIGTERM', () => { shutdown('SIGTERM'); });

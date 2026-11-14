@@ -28,6 +28,7 @@ const config = {
 
   // Connection lifecycle
   reconnectDelayMs: int('RECONNECT_DELAY_MS', 5000),
+  connectTimeoutMs: int('CONNECT_TIMEOUT_MS', 10000),
   channelMonitorIntervalMs: 1000,
   channelMonitorMaxChecks: 20,
   channelOpenStaggerMs: 200,

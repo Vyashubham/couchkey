@@ -26,6 +26,9 @@ All notable changes are recorded here. Format:
 - Research notes moved to `docs/research/text-input.md`.
 
 ### Fixed
+- Connecting no longer hangs forever if the Xbox doesn't answer (10 s
+  timeout, then retry), and stopping the server disconnects from the
+  Xbox cleanly so the next start doesn't hit a stale session.
 - Menu and View were swapped (library bug); Tab now sends View and M
   sends Menu, verified on a Series X.
 - Connection no longer times out after bursts of button presses: the
