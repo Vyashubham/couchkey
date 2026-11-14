@@ -11,11 +11,14 @@ decisions are in `docs/ROADMAP.md`.
 ## Commands
 
 ```bash
-npm install          # Node >= 22.9
-npm start            # server on http://localhost:3247 (loads .env if present)
-npm test             # node:test suite in test/
-npm run lint         # eslint
-npm run check        # lint + test (run before every commit)
+npm install          # Node >= 22.13
+npm run dev          # tsx watch mode, http://localhost:3247 (loads .env)
+npm start            # build to dist/ and run it
+npm test             # vitest (test/**/*.test.ts)
+npm run coverage     # vitest + coverage thresholds
+npm run typecheck    # tsc --noEmit, strict
+npm run lint         # eslint (typescript-eslint strict-type-checked)
+npm run check        # lint + typecheck + coverage (run before every commit)
 ```
 
 Config is env-driven: see `.env.example` and `src/config.js`.
@@ -33,6 +36,12 @@ Config is env-driven: see `.env.example` and `src/config.js`.
 
 ## Code rules
 
+- New code is TypeScript (strict). Remaining `.js` files under `src/` are
+  legacy CommonJS that M2 rewrites; don't add new `.js` modules.
+- Modules that legacy JS `require()`s use `export =` when the JS expects
+  the module itself (config, bus). New modules use named exports.
+- Pass dependencies in (send functions, loggers, clocks) instead of
+  importing I/O modules, so code stays testable without a console.
 - Domain code (`src/xbox`, `src/protocol`, `src/osk`) must not import from
   `src/server`. Talk to the GUI through the event bus (`src/bus.js`).
 - Touching `xbox-smartglass-core-node` private fields (`_events`,

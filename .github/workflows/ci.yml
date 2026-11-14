@@ -30,8 +30,18 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Test
-        run: npm test
+      - name: Typecheck
+        run: npm run typecheck
 
-      - name: Verify entry point parses
-        run: node -c server.js
+      - name: Test with coverage
+        run: npm run coverage
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload coverage
+        if: matrix.node-version == '24.x'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/

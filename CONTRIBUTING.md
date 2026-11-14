@@ -21,11 +21,12 @@ npm install
 npm start
 ```
 
-Requires Node.js 22.9 or newer. To change settings, copy `.env.example`
+Requires Node.js 22.13 or newer. To change settings, copy `.env.example`
 to `.env`; `npm start` picks it up.
 
-There's no build step yet. Edits to `server.js` or `src/*.js` need a
-restart; edits to `public/index.html` just need a browser refresh.
+Use `npm run dev` while working: it restarts on changes to `server.ts`
+and `src/`. `public/index.html` just needs a browser refresh. `npm start`
+builds to `dist/` and runs the build.
 
 Before you start larger work, read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 and pick (or propose) a ticket in [docs/ROADMAP.md](docs/ROADMAP.md).
@@ -49,10 +50,15 @@ short version. Two notes:
 We work test-first: write a failing test, make it pass, then clean up.
 
 ```bash
-npm test          # unit tests (node:test, in test/)
+npm test          # vitest
+npm run typecheck
 npm run lint
-npm run check     # both; CI runs the same on Node 22, 24 and 26
+npm run check     # lint + typecheck + tests with coverage; CI runs the same on Node 22, 24 and 26
 ```
+
+Tests live in `test/unit` (pure logic) and, from M1 onward,
+`test/integration` (services against the fake console). Coverage
+thresholds are enforced per folder and go up as legacy code is rewritten.
 
 Then a manual check:
 

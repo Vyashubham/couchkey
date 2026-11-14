@@ -44,7 +44,7 @@ with the same titles.
 - Tests: CI typecheck job; existing OSK + gamepad tests pass unchanged after conversion.
 
 **T-102 Test harness**
-- AC: Vitest for unit/integration with coverage report; Playwright for e2e; `npm test` runs unit + integration; `npm run test:e2e` runs browser tests; coverage thresholds enforced in CI for `src/core` (≥ 90%) and overall (≥ 75%).
+- AC: Vitest for unit/integration with coverage report; `npm test` runs unit + integration; coverage thresholds enforced per folder in CI (pure core ≥ 90%), ratcheting the overall threshold up to ≥ 75% as M2 replaces legacy modules. Playwright e2e lands with the new GUI (T-302), since there is nothing worth driving in the legacy page.
 - Tests: a deliberately failing sample test fails CI (verified once, then removed).
 
 **T-103 ConsoleAdapter + SmartGlassAdapter** (D5)
@@ -178,7 +178,7 @@ with the same titles.
 ## Done in M0 (this PR)
 
 - Audit (ARCHITECTURE §2)
-- Node floor 18 → 22.9 (18 and 20 are end-of-life); CI matrix 22/24/26
+- Node floor 18 → 22.13 (18 and 20 are end-of-life); CI matrix 22/24/26
 - `.env` support (`--env-file-if-exists`) and `.env.example`
 - Research log moved to `docs/research/text-input.md`
 - Renamed to Couchkey; desktop host/join model decided (D3, D4)

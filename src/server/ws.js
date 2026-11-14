@@ -18,7 +18,7 @@ async function oskType(msg) {
   const layout = getLayout(msg.layout);
   if (!layout) return { ok: false, error: `Unknown OSK layout: ${msg.layout}` };
   if (msg.fresh) resetPosition(layout.id); // keyboard was just opened
-  return typeOnOsk(layout, String(msg.text || ''));
+  return typeOnOsk(layout, String(msg.text || ''), { send: sendButton, log: plog });
 }
 
 // Map of inbound WS message type → (msg, ws) → handler that returns

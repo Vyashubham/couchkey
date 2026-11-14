@@ -8,8 +8,9 @@ const state = require('../state');
 const { getRecentLogs, paths: logPaths } = require('../logger');
 const { discoverConsoles, connectToConsole, disconnect } = require('../xbox/connection');
 
+const { PUBLIC_DIR } = require('../paths');
+
 const RECENT_LOGS_HTTP_COUNT = 200;
-const PUBLIC_DIR = path.resolve(__dirname, '..', '..', 'public');
 
 function registerHttpRoutes(app) {
   app.use(express.static(PUBLIC_DIR));
@@ -82,5 +83,4 @@ function registerHttpRoutes(app) {
 
 module.exports = {
   registerHttpRoutes,
-  PUBLIC_DIR,
 };
