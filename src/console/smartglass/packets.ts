@@ -27,6 +27,10 @@ const FLAG_GAMEPAD = Buffer.from('8f0a', 'hex');
 const FLAG_ACK = Buffer.from('8001', 'hex');
 const FLAG_ACK_NEEDS_ACK = Buffer.from('a001', 'hex');
 const CORE_CHANNEL = Buffer.alloc(8);
+// SystemTouch (0xF2E), sent on the SystemInput channel. OpenXbox docs say
+// it doesn't request an ack; we can ask for one when probing.
+const FLAG_TOUCH = Buffer.from('8f2e', 'hex');
+const FLAG_TOUCH_ACKED = Buffer.from('af2e', 'hex');
 
 const PACKET_TYPE_MESSAGE = Buffer.from('d00d', 'hex');
 const BLOCK_SIZE = 16;
@@ -192,4 +196,36 @@ export function buildGamepadPacket(
   ].forEach((v, i) => floats.writeFloatBE(v, i * 4));
   payload.writeBytes(floats);
   return seal(env, env.needAck === false ? FLAG_GAMEPAD : FLAG_GAMEPAD_ACKED, payload.toBuffer());
+}
+
+export const TOUCH_ACTION = { down: 1, move: 2, up: 3, cancel: 4 } as const;
+export type TouchAction = keyof typeof TOUCH_ACTION;
+
+export interface TouchPoint {
+  id: number;
+  action: TouchAction;
+  x: number;
+  y: number;
+}
+
+/**
+ * SystemTouch (0xF2E), per OpenXbox: timestamp u32, count u16, then per
+ * point: id u32, action u16 (1 down, 2 move, 3 up, 4 cancel), x u32, y u32.
+ * The coordinate space isn't documented.
+ */
+export function buildTouchPacket(
+  env: Envelope & { points: TouchPoint[]; timestamp?: number; needAck?: boolean },
+): Buffer {
+  const head = Buffer.alloc(6);
+  head.writeUInt32BE((env.timestamp ?? Date.now()) >>> 0, 0);
+  head.writeUInt16BE(env.points.length, 4);
+  const body = Buffer.alloc(14 * env.points.length);
+  env.points.forEach((p, i) => {
+    const o = i * 14;
+    body.writeUInt32BE(p.id >>> 0, o);
+    body.writeUInt16BE(TOUCH_ACTION[p.action], o + 4);
+    body.writeUInt32BE(Math.max(0, Math.round(p.x)) >>> 0, o + 6);
+    body.writeUInt32BE(Math.max(0, Math.round(p.y)) >>> 0, o + 10);
+  });
+  return seal(env, env.needAck ? FLAG_TOUCH_ACKED : FLAG_TOUCH, Buffer.concat([head, body]));
 }

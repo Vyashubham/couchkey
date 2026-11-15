@@ -16,7 +16,7 @@
 const config = require('../config');
 const { plog } = require('../logger');
 const state = require('../state');
-const { buildGamepadPacket } = require('../console/smartglass/packets');
+const { buildGamepadPacket, buildTouchPacket } = require('../console/smartglass/packets');
 const { AckTracker } = require('../console/smartglass/ack-tracker');
 const { BUTTON_MASKS: BUTTONS } = require('../console/types');
 
@@ -160,7 +160,35 @@ async function probeSticks({ lx = 0.7, ly = 0, count = 10, periodMs = 100 } = {}
   return { ok: true, summary, results: results.sort((a, b) => a.i - b.i) };
 }
 
+// Diagnostic: play a list of touch frames (each { action, x, y, delayMs })
+// as SystemTouch messages with need_ack, and report the Xbox's answers.
+async function probeTouch(frames) {
+  if (!state.sgClient) return { ok: false, error: 'Not connected' };
+  const channelId = inputChannel();
+  if (!channelId) return { ok: false, error: 'Channel not ready' };
+  ensureListener();
+  const results = [];
+  const pendings = [];
+  for (const [i, f] of frames.entries()) {
+    const xbox = state.sgClient._console;
+    xbox.get_requestnum();
+    const seq = xbox._request_num;
+    const pending = acks.track(seq, config.gamepadAckTimeoutMs);
+    state.sgClient._send(buildTouchPacket({
+      xbox, channelId, needAck: true,
+      points: [{ id: 1, action: f.action, x: f.x, y: f.y }],
+    }));
+    pendings.push(pending.then(o => results.push({ i, action: f.action, outcome: o })));
+    await sleep(f.delayMs || 30);
+  }
+  await Promise.all(pendings);
+  const summary = results.reduce((m, r) => ({ ...m, [r.outcome]: (m[r.outcome] || 0) + 1 }), {});
+  plog('info', 'Touch probe', { frames: frames.length, summary });
+  return { ok: true, summary };
+}
+
 module.exports = {
+  probeTouch,
   probeSticks,
   sendButtonAcked,
   sendButtonRaw,
