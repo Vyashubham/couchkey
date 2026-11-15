@@ -1,6 +1,8 @@
 # Roadmap & backlog
 
-Status: **approved** (Nov 2026). Decisions below are settled unless marked open.
+Status: **paused pending the hardware decision** (2026-11-15). See
+[STATUS.md](STATUS.md) for where things stand. Decisions below are settled
+unless marked open.
 Architecture background: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 Every ticket lists acceptance criteria (AC) and the tests that prove them.
@@ -22,6 +24,7 @@ with the same titles.
 | D4 | Where it runs | **Desktop app (Electron) that hosts or joins.** Anyone downloads it; on launch it looks for a Couchkey host on the Wi-Fi and joins it, otherwise becomes the host. One host per network, automatic handover when the host leaves. Phones join through the browser. Anyone on the Wi-Fi may use it (household mode); approved-devices mode and a host lock are optional. See ARCHITECTURE §6. |
 | D5 | SmartGlass library | Keep `xbox-smartglass-core-node`, isolated behind one adapter. Replacing it becomes a one-file change. |
 | D6 | Testing without an Xbox | **FakeConsole at the adapter level** + recorded packet fixtures. Every PR that touches console behavior lists what to check on real hardware. |
+| D8 | Software-only vs USB HID bridge (**open**) | Live testing showed SmartGlass can't move a cursor, send real shortcuts, or type into Netflix/YouTube, and the official Xbox app already covers basic remote use. Recommendation: build a Wi-Fi USB keyboard+mouse bridge (ESP32-S3, see [research/usb-hid-bridge/report.md](research/usb-hid-bridge/report.md)) and keep SmartGlass for wake/media. First step: test a spare USB keyboard/mouse on the console, then order the board. M1 tickets T-105..T-109 are paused until this is decided. |
 | D7 | Always-on hosts (later) | TV (LG webOS can't keep a background server), Cox gateway and Echo can't run custom software. Docker / Raspberry Pi images stay on the backlog for people who have an always-on device. Microsoft's cloud remote API is a possible later add-on for power/navigation from anywhere (needs Microsoft login, slower, no confirmed text input). |
 
 ## Milestones
