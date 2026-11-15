@@ -141,6 +141,38 @@ Tested against a retail Series X with the project's own probes.
 - **Edge on Xbox:** X opens a new tab (address bar gets focus, so a text
   session starts); one of Menu/View toggles full screen. No controller
   shortcut for closing a tab was found.
+- **SystemTouch (0xF2E) is accepted but does nothing visible.** Layout per
+  OpenXbox (timestamp u32, count u16, points of id u32 / action u16 /
+  x u32 / y u32). A drag and a tap in 1920x1080 and 0..65535 coordinate
+  spaces were all acknowledged as processed (56/56) with no visible effect
+  in Edge. The touchpad feature of the old SmartGlass app is not usable on
+  current Edge for Xbox.
+- **Netflix and YouTube search never open a system text session.** No
+  SystemTextConfiguration arrives and SystemTextInput gets no ack, so the
+  official Xbox app's phone keyboard can't type there either (same
+  mechanism). Typing there means driving the app's own on-screen grid.
+- **App-keyboard (OSK) typing is not working yet.** Netflix: nothing was
+  typed (the highlight was probably not on the keyboard grid when we
+  started). YouTube: presses landed but hit the wrong keys; the run that
+  follows a bad run starts from a wrong remembered position, compounding
+  errors. The layouts are unverified guesses from photos; calibration
+  (start on a known key, type "abc") is the next step if this path is
+  pursued.
+- **Idle sessions drop.** Three times the Xbox stopped answering about 10 s
+  after a console_status message, while idle; an immediate reconnect
+  always worked. Unconfirmed hypothesis: the official Xbox app on a phone
+  connecting as a second SmartGlass client takes over. Recovery is
+  automatic (~35-50 s); detecting it sooner is a TODO.
+
+## Is software-only worth it? (decision input, Nov 2026)
+
+The official Xbox mobile app already offers the d-pad/buttons, media
+controls and phone-keyboard typing into system text fields, and works
+away from home. Over SmartGlass, Couchkey can add laptop-keyboard control,
+button macros and no Microsoft-account requirement, but cannot add a
+cursor, real shortcuts, or typing into apps with their own keyboards. The
+USB HID bridge (see [usb-hid-bridge/report.md](usb-hid-bridge/report.md))
+is the only path to those.
 
 ## The three locks that gate everything
 

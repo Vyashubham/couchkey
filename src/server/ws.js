@@ -13,7 +13,13 @@ const { sendButton, runMacro, sendMediaCommand, setInputOptions, pressBench } = 
 const { sendText, submitText, cancelText } = require('../xbox/text');
 const { getLayout, listLayouts } = require('../osk/registry');
 const { typeOnOsk, cancelOskTyping, resetPosition } = require('../osk/typer');
-const { sendSticks, probeSticks } = require('../xbox/gamepad');
+const { sendSticks, probeSticks, probeTouch } = require('../xbox/gamepad');
+
+const TOUCH_ACTIONS = new Set(['down', 'move', 'up', 'cancel']);
+const touchFrames = msg => (Array.isArray(msg.frames) ? msg.frames : [])
+  .slice(0, 200)
+  .filter(f => f && TOUCH_ACTIONS.has(f.action))
+  .map(f => ({ action: f.action, x: num(f.x), y: num(f.y), delayMs: Math.min(1000, num(f.delayMs) || 30) }));
 
 const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 
@@ -38,6 +44,7 @@ const HANDLERS = {
   osk_reset:   msg => { resetPosition(msg.layout); return { ok: true }; },
   osk_list:    ()  => ({ ok: true, layouts: listLayouts() }),
   input_options: msg => setInputOptions(msg),
+  touch_probe: msg => probeTouch(touchFrames(msg)),
   stick_probe: msg => probeSticks({ lx: num(msg.lx), ly: num(msg.ly), count: Math.min(50, num(msg.count) || 10), periodMs: num(msg.periodMs) || 100 }),
   sticks:      msg => sendSticks({ leftX: num(msg.lx), leftY: num(msg.ly), rightX: num(msg.rx), rightY: num(msg.ry) }),
   press_bench: msg => pressBench(msg.count),
@@ -57,6 +64,7 @@ const ACK_TYPE = {
   input_options: 'input_options_ack',
   sticks:      null, // high-frequency: no ack
   stick_probe: 'stick_probe_ack',
+  touch_probe: 'touch_probe_ack',
   press_bench: 'press_bench_ack',
 };
 

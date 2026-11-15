@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
-  buildAckPacket, buildGamepadPacket, gamepadTimestamp, buildTextAckPacket, buildTextDonePacket, buildTextInputPacket, encodeSGString, padTo16,
+  buildAckPacket, buildGamepadPacket, buildTouchPacket, gamepadTimestamp, buildTextAckPacket, buildTextDonePacket, buildTextInputPacket, encodeSGString, padTo16,
 } from '../../../src/console/smartglass/packets';
 import { FakeSgClient, SIG, unseal } from './fake-sg-client';
 
@@ -93,4 +93,18 @@ test('gamepad timestamps match the library encoding and stay monotonic', () => {
   const a = gamepadTimestamp(1763108152312).readBigUInt64BE(0);
   const b = gamepadTimestamp(1763108152313).readBigUInt64BE(0);
   assert.ok(b > a);
+});
+
+test('touch packet layout per OpenXbox: ts, count, points of id/action/x/y', () => {
+  const p = unseal(buildTouchPacket({
+    ...env(), timestamp: 1234, needAck: true,
+    points: [{ id: 7, action: 'down', x: 960, y: 540 }, { id: 7, action: 'up', x: -5, y: 540.6 }],
+  }));
+  assert.equal(p.flags, 'af2e');
+  assert.equal(p.len, 6 + 28);
+  const b = p.payload;
+  assert.deepEqual([b.readUInt32BE(0), b.readUInt16BE(4)], [1234, 2]);
+  assert.deepEqual([b.readUInt32BE(6), b.readUInt16BE(10), b.readUInt32BE(12), b.readUInt32BE(16)], [7, 1, 960, 540]);
+  assert.deepEqual([b.readUInt16BE(24), b.readUInt32BE(26), b.readUInt32BE(30)], [3, 0, 541]);
+  assert.equal(unseal(buildTouchPacket({ ...env(), points: [] })).flags, '8f2e');
 });

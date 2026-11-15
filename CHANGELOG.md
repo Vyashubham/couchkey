@@ -10,6 +10,9 @@ All notable changes are recorded here. Format:
 - Remembers your Xbox and reconnects automatically on startup
   (`AUTO_CONNECT=0` to disable).
 - LB/RB on Q/E (or [ and ]): previous/next tab in Edge.
+- SystemTouch packet builder and touch probe diagnostic (accepted by the
+  Xbox, no visible effect in Edge; see research notes).
+- USB HID bridge research report (`docs/research/usb-hid-bridge/`).
 - Analog stick messages and a stick probe diagnostic (the Xbox accepts
   them but SmartGlass doesn't move Edge's cursor; see research notes).
 - App keyboard typing (experimental): types into apps that draw their own
